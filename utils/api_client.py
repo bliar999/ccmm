@@ -7,13 +7,20 @@ import os
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 
-class DeepSeekClient:
+class APIClient:
     """DeepSeek API的通用客户端封装"""
 
     def __init__(self, api_key=None, base_url="https://api.deepseek.com/v1"):
-        self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
+        if api_key:
+            self.api_key = api_key
+        else:
+            try:
+                import streamlit as st
+                self.api_key = st.secrets["DEEPSEEK_API_KEY"]
+            except Exception:
+                self.api_key = os.getenv("DEEPSEEK_API_KEY")
         if not self.api_key:
-            raise ValueError("未找到API Key，请检查.env文件")
+            raise ValueError("API 缺少: 请填写密钥，或配置.env文件/Streamlit Secrets")
         self.client = OpenAI(api_key=self.api_key, base_url=base_url)
 
     def chat(self, prompt, system="你是一个乐于助人的助手",
