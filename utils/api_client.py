@@ -3,38 +3,38 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import os
 
-# 加载环境变量（向上两级到项目根目录）
+# 本地开发用.env
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 
-class APIClient:
-    """DeepSeek API的通用客户端封装"""
-
+class DeepSeekClient:
     def __init__(self, api_key=None, base_url="https://api.deepseek.com/v1"):
-        if api_key:
-            self.api_key = api_key
-        else:
+        self.api_key = api_key
+
+        # 如果没手动传入，尝试从环境变量读取（本地）
+        if not self.api_key:
+            self.api_key = os.getenv("DEEPSEEK_API_KEY")
+
+        # 如果还没读到，尝试从Streamlit Secrets读取（云端）
+        if not self.api_key:
             try:
                 import streamlit as st
-                self.api_key = st.secrets["DEEPSEEK_API_KEY"]
+                # 重点：在函数内部导入st，避免启动时的初始化顺序问题
+                secrets_key = st.secrets.get("DEEPSEEK_API_KEY")
+                if secrets_key:
+                    self.api_key = secrets_key
             except Exception:
-                self.api_key = os.getenv("DEEPSEEK_API_KEY")
+                # 如果st.secrets不可用，静默跳过
+                pass
+
+        # 最后兜底
         if not self.api_key:
-            raise ValueError("API 缺少: 请填写密钥，或配置.env文件/Streamlit Secrets")
+            raise ValueError("未找到API Key，请检查.env文件或者Streamlit Secrets")
+
         self.client = OpenAI(api_key=self.api_key, base_url=base_url)
 
     def chat(self, prompt, system="你是一个乐于助人的助手",
              temperature=0.7, max_tokens=4096, stream=False):
-        """
-        通用的对话方法
-
-        参数:
-            prompt: 用户输入
-            system: 系统提示词
-            temperature: 随机性 (0-2)
-            max_tokens: 最大输出长度
-            stream: 是否流式输出
-        """
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": prompt}
@@ -47,16 +47,10 @@ class APIClient:
             stream=stream
         )
         if stream:
-            return response  # 返回生成器对象
+            return response
         return response.choices[0].message.content
 
     def chat_with_history(self, messages, temperature=0.7):
-        """
-        支持多轮对话历史
-
-        参数:
-            messages: 完整消息列表 [{"role": "user/assistant/system", "content": "..."}]
-        """
         response = self.client.chat.completions.create(
             model="deepseek-chat",
             messages=messages,
