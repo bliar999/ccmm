@@ -1,5 +1,5 @@
 """
-莉莉 - 动态卡通人物版
+莉莉 - 动态卡通人物版（无代码残留）
 """
 
 import streamlit as st
@@ -12,7 +12,6 @@ from datetime import datetime
 import requests
 import os
 import random
-import time
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -26,7 +25,6 @@ load_dotenv()
 
 # ==================== 动态配置 ====================
 
-# 莉莉的心情状态
 LILI_MOODS = [
     {"emoji": "💕", "text": "今天心情超好！", "color": "#ec407a"},
     {"emoji": "🌸", "text": "春暖花开～", "color": "#ab47bc"},
@@ -36,7 +34,6 @@ LILI_MOODS = [
     {"emoji": "🌟", "text": "等你很久啦！", "color": "#ffa726"}
 ]
 
-# 思考时的动态文案
 THINKING_ANIMATIONS = [
     "🤔 莉莉在想...",
     "🌸 莉莉转圈圈...",
@@ -323,7 +320,7 @@ class SupervisorAgent(BaseAgent):
         return summary
 
 
-# ==================== 动态CSS ====================
+# ==================== 动态CSS（纯CSS花瓣飘落，无代码残留） ====================
 
 def load_css():
     st.markdown("""
@@ -336,7 +333,7 @@ def load_css():
         overflow-x: hidden;
     }
 
-    /* ===== 花瓣飘落动画 ===== */
+    /* ===== 纯CSS花瓣飘落 ===== */
     .petals {
         position: fixed;
         top: 0;
@@ -347,16 +344,26 @@ def load_css():
         z-index: 0;
         overflow: hidden;
     }
-    .petal {
+    .petals::before,
+    .petals::after {
+        content: "🌸 🌺 🌷 🌹 🌻 🌼 🌸 🌺 🌷 🌹 🌻 🌼 🌸 🌺 🌷 🌹 🌻 🌼";
         position: absolute;
-        top: -20px;
+        top: -50px;
+        left: 0;
+        width: 200%;
         font-size: 1.5rem;
-        animation: fall linear infinite;
-        opacity: 0.6;
+        white-space: nowrap;
+        animation: fall 12s linear infinite;
+        opacity: 0.4;
+        letter-spacing: 20px;
+    }
+    .petals::after {
+        animation-delay: 6s;
+        left: -50%;
     }
     @keyframes fall {
-        0% { transform: translateY(-20px) rotate(0deg) translateX(0); opacity: 0.6; }
-        100% { transform: translateY(110vh) rotate(720deg) translateX(100px); opacity: 0; }
+        0% { transform: translateY(-50px) rotate(0deg); opacity: 0.4; }
+        100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
     }
 
     /* ===== 莉莉头像呼吸浮动 ===== */
@@ -397,16 +404,6 @@ def load_css():
     @keyframes blink {
         0%, 45%, 55%, 100% { transform: scaleY(1); }
         50% { transform: scaleY(0.1); }
-    }
-
-    /* ===== 思考旋转动画 ===== */
-    .thinking-spin {
-        display: inline-block;
-        animation: spin 1.5s linear infinite;
-    }
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
     }
 
     /* ===== 名字标签 ===== */
@@ -482,20 +479,6 @@ def load_css():
         100% { transform: translateX(0); opacity: 1; }
     }
 
-    /* ===== 打字机光标 ===== */
-    .typing-cursor {
-        display: inline-block;
-        width: 2px;
-        height: 1.2em;
-        background: #ec407a;
-        margin-left: 2px;
-        animation: cursor-blink 0.8s step-end infinite;
-    }
-    @keyframes cursor-blink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0; }
-    }
-
     /* ===== 输入框发光 ===== */
     [data-testid="stChatInput"] textarea {
         border-radius: 30px !important;
@@ -555,37 +538,13 @@ def load_css():
     """, unsafe_allow_html=True)
 
 
-# ==================== 花瓣飘落 HTML ====================
-
-def render_petals():
-    petals = ["🌸", "🌺", "🌷", "🌹", "🌻", "🌼"]
-    petal_html = '<div class="petals">'
-    for i in range(12):
-        petal = random.choice(petals)
-        delay = random.uniform(0, 8)
-        duration = random.uniform(6, 12)
-        left = random.uniform(0, 95)
-        size = random.uniform(1, 2.5)
-        petal_html += f'''
-        <div class="petal" style="
-            left: {left}%;
-            font-size: {size}rem;
-            animation-delay: {delay}s;
-            animation-duration: {duration}s;
-        ">{petal}</div>
-        '''
-    petal_html += '</div>'
-    return petal_html
-
-
-# ==================== Streamlit UI ====================
+# ==================== 页面 ====================
 
 load_css()
 
-# 花瓣飘落
-st.markdown(render_petals(), unsafe_allow_html=True)
+# 花瓣（纯CSS，不会露代码）
+st.markdown('<div class="petals"></div>', unsafe_allow_html=True)
 
-# ========== 莉莉动态头像 ==========
 # 随机心情
 current_mood = random.choice(LILI_MOODS)
 
@@ -721,7 +680,6 @@ with st.sidebar:
 if st.session_state.need_load:
     load_conversation(st.session_state.current_conv_id)
 
-# 显示消息
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
@@ -744,7 +702,6 @@ if user_input:
         title = user_input[:30] + ("..." if len(user_input) > 30 else "")
         db.update_conversation_title(st.session_state.current_conv_id, title)
 
-    # 动态思考提示
     thinking_text = random.choice(THINKING_ANIMATIONS)
     with st.spinner(thinking_text):
         try:
@@ -783,3 +740,9 @@ if user_input:
             st.error(f"莉莉遇到问题：{e}")
 
 st.markdown('<div class="footer-tip">💡 提示：试试切换模式问同样的问题！</div>', unsafe_allow_html=True)
+
+
+
+
+
+
