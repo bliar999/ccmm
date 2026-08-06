@@ -1,6 +1,5 @@
 """
-莉莉 - 完整版（所有代码合并在一个文件）
-整合：普通模式 + 单Agent + 多Agent
+莉莉 - 趣味界面版
 """
 
 import streamlit as st
@@ -12,6 +11,7 @@ import math
 from datetime import datetime
 import requests
 import os
+import random
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -23,10 +23,37 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# ==================== 趣味配置 ====================
+
+# 莉莉的趣味欢迎语
+WELCOME_MESSAGES = [
+    "✨ 嗨！我是莉莉，今天想聊点什么？",
+    "🌸 你来啦！我正等你呢～",
+    "💫 莉莉已上线，随时为你服务！",
+    "🌺 今天的心情怎么样？和我分享吧！",
+    "🎀 莉莉在此，有何吩咐？",
+    "💕 见到你真开心！"
+]
+
+# 莉莉的思考状态
+THINKING_MESSAGES = [
+    "莉莉正在思考... 🤔",
+    "莉莉在翻小本本... 📖",
+    "莉莉在认真听你说... 👂",
+    "莉莉在组织语言... ✍️",
+    "莉莉在回忆知识点... 🧠"
+]
+
+# 模式对应的图标和颜色
+MODE_CONFIG = {
+    "💬 普通模式": {"icon": "💬", "color": "#6C63FF", "bg": "#EEECFF"},
+    "🤖 单Agent模式": {"icon": "🤖", "color": "#FF6B6B", "bg": "#FFEEEE"},
+    "🧑‍🤝‍🧑 多Agent模式": {"icon": "🧑‍🤝‍🧑", "color": "#4ECDC4", "bg": "#EEFFFD"}
+}
+
 
 # ==================== 单Agent 工具函数 ====================
 
-# 工具1：获取当前时间
 def get_current_time(timezone: str = "Asia/Shanghai", format_type: str = "full") -> dict:
     try:
         import pytz
@@ -68,7 +95,6 @@ def get_time_tool_desc():
     }
 
 
-# 工具2：数学计算
 def calculate(expression: str) -> dict:
     allowed_chars = r'[\d+\-*/().% ]'
     if not re.match(f'^{allowed_chars}+$', expression):
@@ -97,7 +123,6 @@ def get_calc_tool_desc():
     }
 
 
-# 工具3：网络搜索
 def web_search(query: str, max_results: int = 3) -> dict:
     try:
         url = "https://api.duckduckgo.com/"
@@ -160,7 +185,6 @@ def execute_tool(tool_name: str, arguments: dict):
 
 
 def react_agent(question: str, max_steps: int = 3):
-    """单Agent主函数"""
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
         try:
@@ -289,12 +313,178 @@ class SupervisorAgent(BaseAgent):
         return summary
 
 
+# ==================== 自定义CSS ====================
+
+def load_css():
+    st.markdown("""
+    <style>
+    /* 全局字体和背景 */
+    .stApp {
+        background: linear-gradient(135deg, #fdf2f8 0%, #fce4ec 50%, #f3e5f5 100%);
+        font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    }
+
+    /* 标题区域 */
+    .lili-header {
+        text-align: center;
+        padding: 20px 0 10px 0;
+        background: linear-gradient(135deg, #ec407a, #ab47bc);
+        border-radius: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 8px 32px rgba(236, 64, 122, 0.3);
+    }
+    .lili-header h1 {
+        font-size: 2.5rem;
+        color: white;
+        margin: 0;
+        font-weight: 700;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+    .lili-header p {
+        color: rgba(255,255,255,0.9);
+        font-size: 1.1rem;
+        margin: 5px 0 0 0;
+    }
+
+    /* 聊天消息 */
+    .user-message {
+        background: linear-gradient(135deg, #e8eaf6, #c5cae9);
+        padding: 12px 18px;
+        border-radius: 18px 18px 4px 18px;
+        margin: 8px 0;
+        max-width: 80%;
+        float: right;
+        clear: both;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        color: #1a1a2e;
+    }
+    .assistant-message {
+        background: linear-gradient(135deg, #ffffff, #f5f5f5);
+        padding: 12px 18px;
+        border-radius: 18px 18px 18px 4px;
+        margin: 8px 0;
+        max-width: 80%;
+        float: left;
+        clear: both;
+        box-shadow: 0 2px 12px rgba(236, 64, 122, 0.15);
+        border: 1px solid rgba(236, 64, 122, 0.1);
+        color: #1a1a2e;
+    }
+
+    /* 侧边栏美化 */
+    [data-testid="stSidebar"] {
+        background: rgba(255,255,255,0.7);
+        backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(255,255,255,0.3);
+    }
+    [data-testid="stSidebar"] h1, 
+    [data-testid="stSidebar"] h2, 
+    [data-testid="stSidebar"] h3 {
+        color: #4a148c;
+    }
+
+    /* 模式选择卡片 */
+    .mode-card {
+        padding: 12px 16px;
+        border-radius: 12px;
+        margin: 6px 0;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+    }
+    .mode-card:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    }
+    .mode-card-selected {
+        border-color: #ec407a;
+        background: rgba(236, 64, 122, 0.08);
+        box-shadow: 0 4px 16px rgba(236, 64, 122, 0.15);
+    }
+
+    /* 输入框美化 */
+    [data-testid="stChatInput"] textarea {
+        border-radius: 25px !important;
+        border: 2px solid #f3e5f5 !important;
+        background: rgba(255,255,255,0.8) !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05) !important;
+    }
+    [data-testid="stChatInput"] textarea:focus {
+        border-color: #ec407a !important;
+        box-shadow: 0 4px 30px rgba(236, 64, 122, 0.15) !important;
+    }
+
+    /* 按钮美化 */
+    .stButton button {
+        border-radius: 25px !important;
+        background: linear-gradient(135deg, #ec407a, #ab47bc) !important;
+        color: white !important;
+        border: none !important;
+        padding: 8px 20px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+    }
+    .stButton button:hover {
+        transform: scale(1.02);
+        box-shadow: 0 4px 20px rgba(236, 64, 122, 0.4) !important;
+    }
+
+    /* 状态提示 */
+    .status-bubble {
+        display: inline-block;
+        padding: 4px 16px;
+        border-radius: 20px;
+        background: rgba(236, 64, 122, 0.1);
+        color: #ec407a;
+        font-size: 0.9rem;
+        font-weight: 500;
+        animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+    }
+
+    /* 莉莉头像 */
+    .lili-avatar {
+        font-size: 4rem;
+        text-align: center;
+        animation: float 3s ease-in-out infinite;
+    }
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+    }
+
+    /* 底部提示 */
+    .footer-tip {
+        text-align: center;
+        color: #9e9e9e;
+        font-size: 0.8rem;
+        padding: 20px 0 10px 0;
+        opacity: 0.7;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
 # ==================== Streamlit UI ====================
 
-st.set_page_config(page_title="🌸 莉莉 - 智能团队", page_icon="🌸")
+load_css()
 
-st.title("🌸 莉莉")
-st.caption("💬 普通聊天 ｜ 🤖 工具调用 ｜ 🧑‍🤝‍🧑 团队协作")
+# ========== 头部 ==========
+st.markdown("""
+<div class="lili-header">
+    <div class="lili-avatar">🌸</div>
+    <h1>莉莉</h1>
+    <p>💬 普通聊天 ｜ 🤖 工具调用 ｜ 🧑‍🤝‍🧑 团队协作</p>
+</div>
+""", unsafe_allow_html=True)
+
+# 随机欢迎语
+if "welcome_shown" not in st.session_state:
+    st.session_state.welcome_shown = True
+    st.caption(random.choice(WELCOME_MESSAGES))
 
 
 # ========== 初始化 ==========
@@ -331,33 +521,51 @@ def load_conversation(conv_id: int):
 
 # ========== 侧边栏 ==========
 with st.sidebar:
-    st.header("🎯 模式选择")
+    st.markdown("### 🎯 模式选择")
+
     mode = st.radio(
         "选择工作模式",
         ["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"],
-        help="💬 普通聊天 | 🤖 工具调用 | 🧑‍🤝‍🧑 团队协作"
+        help="💬 普通聊天 | 🤖 工具调用 | 🧑‍🤝‍🧑 团队协作",
+        label_visibility="collapsed"
     )
 
+    # 模式状态显示
+    mode_info = MODE_CONFIG.get(mode, {})
     if mode == "🤖 单Agent模式":
-        st.success("✅ Agent已就绪")
-        st.caption("能力：时间查询 | 数学计算 | 网络搜索")
+        st.markdown(f"""
+        <div style="background:#FFEEEE;padding:10px 14px;border-radius:12px;margin:8px 0;">
+            <span style="font-size:1.2rem;">🤖</span>
+            <span style="font-weight:600;color:#FF6B6B;"> Agent已就绪</span><br>
+            <span style="font-size:0.8rem;color:#888;">⚡ 时间查询 · 计算 · 搜索</span>
+        </div>
+        """, unsafe_allow_html=True)
     elif mode == "🧑‍🤝‍🧑 多Agent模式":
-        st.success("✅ 多Agent团队已就绪")
-        st.caption("成员：研究员 + 批评家 + 监督者")
+        st.markdown(f"""
+        <div style="background:#EEFFFD;padding:10px 14px;border-radius:12px;margin:8px 0;">
+            <span style="font-size:1.2rem;">🧑‍🤝‍🧑</span>
+            <span style="font-weight:600;color:#4ECDC4;"> 团队已就绪</span><br>
+            <span style="font-size:0.8rem;color:#888;">🔬 研究员 · 批评家 · 监督者</span>
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        st.info("💬 普通聊天模式")
+        st.markdown(f"""
+        <div style="background:#EEECFF;padding:10px 14px;border-radius:12px;margin:8px 0;">
+            <span style="font-size:1.2rem;">💬</span>
+            <span style="font-weight:600;color:#6C63FF;"> 普通聊天</span><br>
+            <span style="font-size:0.8rem;color:#888;">💕 温柔体贴的莉莉</span>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.divider()
 
-    st.header("📜 对话历史")
+    st.markdown("### 📜 对话历史")
     if st.button("➕ 新建对话", use_container_width=True):
         new_id = db.create_conversation("莉莉的新对话")
         st.session_state.current_conv_id = new_id
         st.session_state.messages = []
         st.session_state.need_load = False
         st.rerun()
-
-    st.divider()
 
     conversations = db.list_conversations(20)
     for conv in conversations:
@@ -377,12 +585,12 @@ with st.sidebar:
 
     st.divider()
 
-    st.header("⚙️ 参数")
-    temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1)
+    st.markdown("### ⚙️ 参数")
+    temperature = st.slider("🎨 创造力", 0.0, 2.0, 0.7, 0.1)
     if mode == "🤖 单Agent模式":
-        max_steps = st.slider("Agent推理步数", 1, 5, 3)
+        max_steps = st.slider("🔄 推理步数", 1, 5, 3)
 
-    if st.button("🗑️ 清空当前对话", use_container_width=True):
+    if st.button("🗑️ 清空对话", use_container_width=True):
         db.delete_conversation(st.session_state.current_conv_id)
         new_id = db.create_conversation("莉莉的新对话")
         st.session_state.current_conv_id = new_id
@@ -393,45 +601,50 @@ with st.sidebar:
 if st.session_state.need_load:
     load_conversation(st.session_state.current_conv_id)
 
+# 显示聊天消息
 for msg in st.session_state.messages:
     if msg["role"] == "user":
-        st.chat_message("user").write(msg["content"])
+        st.markdown(f'<div class="user-message">👤 {msg["content"]}</div>', unsafe_allow_html=True)
     elif msg["role"] == "assistant":
-        st.chat_message("assistant").write(msg["content"])
+        st.markdown(f'<div class="assistant-message">🌸 {msg["content"]}</div>', unsafe_allow_html=True)
 
-st.caption(f"{mode} ｜ {len(st.session_state.messages)} 条消息")
+# 状态信息
+st.markdown(
+    f'<div style="text-align:center;padding:6px 0;color:#aaa;font-size:0.75rem;">{mode} ｜ {len(st.session_state.messages)} 条消息</div>',
+    unsafe_allow_html=True)
 
 # ========== 用户输入 ==========
-user_input = st.chat_input("和莉莉聊聊吧 💬")
+user_input = st.chat_input("💬 和莉莉聊聊吧...")
 
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
-    st.chat_message("user").write(user_input)
+    st.markdown(f'<div class="user-message">👤 {user_input}</div>', unsafe_allow_html=True)
     db.save_message(st.session_state.current_conv_id, "user", user_input)
 
     if db.get_conversation_title(st.session_state.current_conv_id) == "莉莉的新对话":
         title = user_input[:30] + ("..." if len(user_input) > 30 else "")
         db.update_conversation_title(st.session_state.current_conv_id, title)
 
-    with st.chat_message("assistant"):
-        with st.spinner("莉莉正在思考..."):
-            try:
-                if mode == "💬 普通模式":
-                    history = st.session_state.messages[-10:] if len(
-                        st.session_state.messages) > 10 else st.session_state.messages
-                    if not history or history[0]["role"] != "system":
-                        history = [{"role": "system", "content": "你是莉莉，一个温柔体贴的AI助手"}] + history
-                    response = client.chat_with_history(history, temperature=temperature)
-                elif mode == "🤖 单Agent模式":
-                    response = react_agent(user_input, max_steps=max_steps)
-                else:
-                    supervisor = SupervisorAgent()
-                    response = supervisor.orchestrate(user_input)
+    with st.spinner(random.choice(THINKING_MESSAGES)):
+        try:
+            if mode == "💬 普通模式":
+                history = st.session_state.messages[-10:] if len(
+                    st.session_state.messages) > 10 else st.session_state.messages
+                if not history or history[0]["role"] != "system":
+                    history = [{"role": "system", "content": "你是莉莉，一个温柔体贴的AI助手"}] + history
+                response = client.chat_with_history(history, temperature=temperature)
+            elif mode == "🤖 单Agent模式":
+                response = react_agent(user_input, max_steps=max_steps)
+            else:
+                supervisor = SupervisorAgent()
+                response = supervisor.orchestrate(user_input)
 
-                st.write(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-                db.save_message(st.session_state.current_conv_id, "assistant", response)
-            except Exception as e:
-                st.error(f"莉莉遇到问题：{e}")
+            st.markdown(f'<div class="assistant-message">🌸 {response}</div>', unsafe_allow_html=True)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            db.save_message(st.session_state.current_conv_id, "assistant", response)
 
-st.caption("💡 提示：不同模式有不同能力，试试切换模式问同样的问题！")
+        except Exception as e:
+            st.error(f"莉莉遇到问题：{e}")
+
+# ========== 底部 ==========
+st.markdown(f'<div class="footer-tip">💡 提示：试试切换模式问同样的问题！</div>', unsafe_allow_html=True)
