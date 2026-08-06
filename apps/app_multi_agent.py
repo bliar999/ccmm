@@ -1,5 +1,5 @@
 """
-莉莉 - 趣味界面版
+莉莉 - 动态卡通人物版
 """
 
 import streamlit as st
@@ -12,6 +12,7 @@ from datetime import datetime
 import requests
 import os
 import random
+import time
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -23,9 +24,28 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ==================== 趣味配置 ====================
+# ==================== 动态配置 ====================
 
-# 莉莉的趣味欢迎语
+# 莉莉的心情状态
+LILI_MOODS = [
+    {"emoji": "💕", "text": "今天心情超好！", "color": "#ec407a"},
+    {"emoji": "🌸", "text": "春暖花开～", "color": "#ab47bc"},
+    {"emoji": "✨", "text": "元气满满！", "color": "#7c4dff"},
+    {"emoji": "🌙", "text": "有点困了 zzz", "color": "#5c6bc0"},
+    {"emoji": "🎀", "text": "今天超可爱！", "color": "#ef5350"},
+    {"emoji": "🌟", "text": "等你很久啦！", "color": "#ffa726"}
+]
+
+# 思考时的动态文案
+THINKING_ANIMATIONS = [
+    "🤔 莉莉在想...",
+    "🌸 莉莉转圈圈...",
+    "✨ 莉莉翻书找答案...",
+    "💫 莉莉在认真思考...",
+    "🎀 莉莉歪着头想...",
+    "📖 莉莉在查资料..."
+]
+
 WELCOME_MESSAGES = [
     "✨ 嗨！我是莉莉，今天想聊点什么？",
     "🌸 你来啦！我正等你呢～",
@@ -35,16 +55,6 @@ WELCOME_MESSAGES = [
     "💕 见到你真开心！"
 ]
 
-# 莉莉的思考状态
-THINKING_MESSAGES = [
-    "莉莉正在思考... 🤔",
-    "莉莉在翻小本本... 📖",
-    "莉莉在认真听你说... 👂",
-    "莉莉在组织语言... ✍️",
-    "莉莉在回忆知识点... 🧠"
-]
-
-# 模式对应的图标和颜色
 MODE_CONFIG = {
     "💬 普通模式": {"icon": "💬", "color": "#6C63FF", "bg": "#EEECFF"},
     "🤖 单Agent模式": {"icon": "🤖", "color": "#FF6B6B", "bg": "#FFEEEE"},
@@ -313,178 +323,290 @@ class SupervisorAgent(BaseAgent):
         return summary
 
 
-# ==================== 自定义CSS ====================
+# ==================== 动态CSS ====================
 
 def load_css():
     st.markdown("""
     <style>
-    /* 全局字体和背景 */
+    @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap');
+
     .stApp {
-        background: linear-gradient(135deg, #fdf2f8 0%, #fce4ec 50%, #f3e5f5 100%);
-        font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        background: linear-gradient(135deg, #fce4ec 0%, #f3e5f5 40%, #e8eaf6 100%);
+        font-family: 'Quicksand', 'PingFang SC', sans-serif;
+        overflow-x: hidden;
     }
 
-    /* 标题区域 */
-    .lili-header {
-        text-align: center;
-        padding: 20px 0 10px 0;
+    /* ===== 花瓣飘落动画 ===== */
+    .petals {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+    }
+    .petal {
+        position: absolute;
+        top: -20px;
+        font-size: 1.5rem;
+        animation: fall linear infinite;
+        opacity: 0.6;
+    }
+    @keyframes fall {
+        0% { transform: translateY(-20px) rotate(0deg) translateX(0); opacity: 0.6; }
+        100% { transform: translateY(110vh) rotate(720deg) translateX(100px); opacity: 0; }
+    }
+
+    /* ===== 莉莉头像呼吸浮动 ===== */
+    .lili-avatar-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px 0;
+        animation: lili-float 3s ease-in-out infinite;
+        position: relative;
+        z-index: 1;
+    }
+    @keyframes lili-float {
+        0%, 100% { transform: translateY(0px) rotate(0deg); }
+        50% { transform: translateY(-14px) rotate(-2deg); }
+    }
+
+    .lili-avatar {
+        font-size: 5.5rem;
+        line-height: 1.2;
+        filter: drop-shadow(0 8px 32px rgba(236, 64, 122, 0.3));
+        transition: all 0.3s ease;
+        animation: lili-glow 2s ease-in-out infinite alternate;
+    }
+    @keyframes lili-glow {
+        0% { filter: drop-shadow(0 8px 24px rgba(236, 64, 122, 0.2)); }
+        100% { filter: drop-shadow(0 8px 40px rgba(236, 64, 122, 0.5)); }
+    }
+    .lili-avatar:hover {
+        transform: scale(1.15) rotate(-8deg);
+    }
+
+    /* ===== 眨眼动画 ===== */
+    .lili-eyes {
+        display: inline-block;
+        animation: blink 3s ease-in-out infinite;
+    }
+    @keyframes blink {
+        0%, 45%, 55%, 100% { transform: scaleY(1); }
+        50% { transform: scaleY(0.1); }
+    }
+
+    /* ===== 思考旋转动画 ===== */
+    .thinking-spin {
+        display: inline-block;
+        animation: spin 1.5s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    /* ===== 名字标签 ===== */
+    .lili-name-tag {
         background: linear-gradient(135deg, #ec407a, #ab47bc);
-        border-radius: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 8px 32px rgba(236, 64, 122, 0.3);
-    }
-    .lili-header h1 {
-        font-size: 2.5rem;
         color: white;
-        margin: 0;
-        font-weight: 700;
-        text-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    }
-    .lili-header p {
-        color: rgba(255,255,255,0.9);
+        padding: 4px 24px;
+        border-radius: 30px;
         font-size: 1.1rem;
-        margin: 5px 0 0 0;
+        font-weight: 700;
+        letter-spacing: 2px;
+        box-shadow: 0 4px 20px rgba(236, 64, 122, 0.3);
+        margin-top: 4px;
+        animation: tag-pulse 2s ease-in-out infinite;
+    }
+    @keyframes tag-pulse {
+        0%, 100% { box-shadow: 0 4px 20px rgba(236, 64, 122, 0.3); }
+        50% { box-shadow: 0 4px 40px rgba(236, 64, 122, 0.5); }
     }
 
-    /* 聊天消息 */
+    /* ===== 状态标签 ===== */
+    .lili-status {
+        background: rgba(236, 64, 122, 0.08);
+        padding: 2px 16px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        color: #ec407a;
+        border: 1px solid rgba(236, 64, 122, 0.15);
+        margin-top: 4px;
+        animation: status-pulse 2s ease-in-out infinite;
+        font-weight: 600;
+    }
+    @keyframes status-pulse {
+        0%, 100% { opacity: 0.7; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.03); }
+    }
+
+    /* ===== 消息弹出动画 ===== */
     .user-message {
-        background: linear-gradient(135deg, #e8eaf6, #c5cae9);
+        background: linear-gradient(135deg, #7c4dff, #536dfe);
+        color: white;
         padding: 12px 18px;
         border-radius: 18px 18px 4px 18px;
         margin: 8px 0;
         max-width: 80%;
         float: right;
         clear: both;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        color: #1a1a2e;
+        box-shadow: 0 4px 16px rgba(83, 109, 254, 0.2);
+        font-weight: 500;
+        animation: slide-in-right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
+    @keyframes slide-in-right {
+        0% { transform: translateX(50px); opacity: 0; }
+        100% { transform: translateX(0); opacity: 1; }
+    }
+
     .assistant-message {
-        background: linear-gradient(135deg, #ffffff, #f5f5f5);
-        padding: 12px 18px;
+        background: white;
+        padding: 14px 20px;
         border-radius: 18px 18px 18px 4px;
         margin: 8px 0;
         max-width: 80%;
         float: left;
         clear: both;
-        box-shadow: 0 2px 12px rgba(236, 64, 122, 0.15);
-        border: 1px solid rgba(236, 64, 122, 0.1);
+        box-shadow: 0 4px 24px rgba(236, 64, 122, 0.12);
+        border: 1px solid rgba(236, 64, 122, 0.08);
         color: #1a1a2e;
+        line-height: 1.7;
+        animation: slide-in-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    @keyframes slide-in-left {
+        0% { transform: translateX(-50px); opacity: 0; }
+        100% { transform: translateX(0); opacity: 1; }
     }
 
-    /* 侧边栏美化 */
-    [data-testid="stSidebar"] {
-        background: rgba(255,255,255,0.7);
-        backdrop-filter: blur(20px);
-        border-right: 1px solid rgba(255,255,255,0.3);
+    /* ===== 打字机光标 ===== */
+    .typing-cursor {
+        display: inline-block;
+        width: 2px;
+        height: 1.2em;
+        background: #ec407a;
+        margin-left: 2px;
+        animation: cursor-blink 0.8s step-end infinite;
     }
-    [data-testid="stSidebar"] h1, 
-    [data-testid="stSidebar"] h2, 
-    [data-testid="stSidebar"] h3 {
-        color: #4a148c;
-    }
-
-    /* 模式选择卡片 */
-    .mode-card {
-        padding: 12px 16px;
-        border-radius: 12px;
-        margin: 6px 0;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        border: 2px solid transparent;
-    }
-    .mode-card:hover {
-        transform: translateX(4px);
-        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-    }
-    .mode-card-selected {
-        border-color: #ec407a;
-        background: rgba(236, 64, 122, 0.08);
-        box-shadow: 0 4px 16px rgba(236, 64, 122, 0.15);
+    @keyframes cursor-blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
     }
 
-    /* 输入框美化 */
+    /* ===== 输入框发光 ===== */
     [data-testid="stChatInput"] textarea {
-        border-radius: 25px !important;
+        border-radius: 30px !important;
         border: 2px solid #f3e5f5 !important;
-        background: rgba(255,255,255,0.8) !important;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.05) !important;
+        background: rgba(255,255,255,0.85) !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.04) !important;
+        font-size: 1rem !important;
+        padding: 12px 20px !important;
+        transition: all 0.3s ease !important;
     }
     [data-testid="stChatInput"] textarea:focus {
         border-color: #ec407a !important;
         box-shadow: 0 4px 30px rgba(236, 64, 122, 0.15) !important;
+        animation: input-glow 1s ease-in-out infinite alternate;
+    }
+    @keyframes input-glow {
+        0% { box-shadow: 0 4px 30px rgba(236, 64, 122, 0.1); }
+        100% { box-shadow: 0 4px 50px rgba(236, 64, 122, 0.25); }
     }
 
-    /* 按钮美化 */
+    /* ===== 侧边栏 ===== */
+    [data-testid="stSidebar"] {
+        background: rgba(255,255,255,0.6) !important;
+        backdrop-filter: blur(20px) !important;
+        border-right: 1px solid rgba(255,255,255,0.3) !important;
+    }
+
+    /* ===== 按钮 ===== */
     .stButton button {
-        border-radius: 25px !important;
+        border-radius: 30px !important;
         background: linear-gradient(135deg, #ec407a, #ab47bc) !important;
         color: white !important;
         border: none !important;
-        padding: 8px 20px !important;
+        padding: 10px 24px !important;
         font-weight: 600 !important;
         transition: all 0.3s ease !important;
+        box-shadow: 0 4px 16px rgba(236, 64, 122, 0.25) !important;
     }
     .stButton button:hover {
-        transform: scale(1.02);
-        box-shadow: 0 4px 20px rgba(236, 64, 122, 0.4) !important;
+        transform: scale(1.05) translateY(-2px);
+        box-shadow: 0 8px 30px rgba(236, 64, 122, 0.35) !important;
+    }
+    .stButton button:active {
+        transform: scale(0.95);
     }
 
-    /* 状态提示 */
-    .status-bubble {
-        display: inline-block;
-        padding: 4px 16px;
-        border-radius: 20px;
-        background: rgba(236, 64, 122, 0.1);
-        color: #ec407a;
-        font-size: 0.9rem;
-        font-weight: 500;
-        animation: pulse 2s ease-in-out infinite;
-    }
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.6; }
-    }
-
-    /* 莉莉头像 */
-    .lili-avatar {
-        font-size: 4rem;
-        text-align: center;
-        animation: float 3s ease-in-out infinite;
-    }
-    @keyframes float {
-        0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-10px); }
-    }
-
-    /* 底部提示 */
+    /* ===== 页脚 ===== */
     .footer-tip {
         text-align: center;
-        color: #9e9e9e;
-        font-size: 0.8rem;
-        padding: 20px 0 10px 0;
+        color: #b39ddb;
+        font-size: 0.75rem;
+        padding: 16px 0 8px 0;
         opacity: 0.7;
+        font-weight: 500;
     }
     </style>
     """, unsafe_allow_html=True)
+
+
+# ==================== 花瓣飘落 HTML ====================
+
+def render_petals():
+    petals = ["🌸", "🌺", "🌷", "🌹", "🌻", "🌼"]
+    petal_html = '<div class="petals">'
+    for i in range(12):
+        petal = random.choice(petals)
+        delay = random.uniform(0, 8)
+        duration = random.uniform(6, 12)
+        left = random.uniform(0, 95)
+        size = random.uniform(1, 2.5)
+        petal_html += f'''
+        <div class="petal" style="
+            left: {left}%;
+            font-size: {size}rem;
+            animation-delay: {delay}s;
+            animation-duration: {duration}s;
+        ">{petal}</div>
+        '''
+    petal_html += '</div>'
+    return petal_html
 
 
 # ==================== Streamlit UI ====================
 
 load_css()
 
-# ========== 头部 ==========
-st.markdown("""
-<div class="lili-header">
-    <div class="lili-avatar">🌸</div>
-    <h1>莉莉</h1>
-    <p>💬 普通聊天 ｜ 🤖 工具调用 ｜ 🧑‍🤝‍🧑 团队协作</p>
+# 花瓣飘落
+st.markdown(render_petals(), unsafe_allow_html=True)
+
+# ========== 莉莉动态头像 ==========
+# 随机心情
+current_mood = random.choice(LILI_MOODS)
+
+st.markdown(f"""
+<div style="text-align:center;padding:8px 0 4px 0;position:relative;z-index:1;">
+    <div class="lili-avatar-container">
+        <div class="lili-avatar">
+            <span class="lili-eyes">🌸</span>
+        </div>
+        <div class="lili-name-tag">✨ 莉莉 · 小花仙 ✨</div>
+        <div class="lili-status">{current_mood['emoji']} {current_mood['text']}</div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
 # 随机欢迎语
 if "welcome_shown" not in st.session_state:
     st.session_state.welcome_shown = True
-    st.caption(random.choice(WELCOME_MESSAGES))
+    st.markdown(
+        f'<p style="text-align:center;color:#7b1fa2;font-weight:500;font-size:1rem;margin-top:4px;position:relative;z-index:1;">✨ {random.choice(WELCOME_MESSAGES)}</p>',
+        unsafe_allow_html=True)
 
 
 # ========== 初始化 ==========
@@ -530,8 +652,6 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
-    # 模式状态显示
-    mode_info = MODE_CONFIG.get(mode, {})
     if mode == "🤖 单Agent模式":
         st.markdown(f"""
         <div style="background:#FFEEEE;padding:10px 14px;border-radius:12px;margin:8px 0;">
@@ -601,14 +721,13 @@ with st.sidebar:
 if st.session_state.need_load:
     load_conversation(st.session_state.current_conv_id)
 
-# 显示聊天消息
+# 显示消息
 for msg in st.session_state.messages:
     if msg["role"] == "user":
-        st.markdown(f'<div class="user-message">👤 {msg["content"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
     elif msg["role"] == "assistant":
-        st.markdown(f'<div class="assistant-message">🌸 {msg["content"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="assistant-message">{msg["content"]}</div>', unsafe_allow_html=True)
 
-# 状态信息
 st.markdown(
     f'<div style="text-align:center;padding:6px 0;color:#aaa;font-size:0.75rem;">{mode} ｜ {len(st.session_state.messages)} 条消息</div>',
     unsafe_allow_html=True)
@@ -618,20 +737,37 @@ user_input = st.chat_input("💬 和莉莉聊聊吧...")
 
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
-    st.markdown(f'<div class="user-message">👤 {user_input}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="user-message">{user_input}</div>', unsafe_allow_html=True)
     db.save_message(st.session_state.current_conv_id, "user", user_input)
 
     if db.get_conversation_title(st.session_state.current_conv_id) == "莉莉的新对话":
         title = user_input[:30] + ("..." if len(user_input) > 30 else "")
         db.update_conversation_title(st.session_state.current_conv_id, title)
 
-    with st.spinner(random.choice(THINKING_MESSAGES)):
+    # 动态思考提示
+    thinking_text = random.choice(THINKING_ANIMATIONS)
+    with st.spinner(thinking_text):
         try:
             if mode == "💬 普通模式":
                 history = st.session_state.messages[-10:] if len(
                     st.session_state.messages) > 10 else st.session_state.messages
                 if not history or history[0]["role"] != "system":
-                    history = [{"role": "system", "content": "你是莉莉，一个温柔体贴的AI助手"}] + history
+                    history = [{"role": "system", "content": """
+你是莉莉，一个温柔可爱的小花仙助手 🌸
+
+你的性格特点：
+- 温柔、活泼、偶尔调皮
+- 喜欢用颜文字，比如 (｡･ω･｡) 和 ✨
+- 回答问题时会带一点可爱的语气词，如"呢～""哦～"
+- 对用户很关心，会主动问"今天心情怎么样呀？"
+
+你的回复风格：
+- 开头可以用 "🌸 莉莉来啦～" 或 "✨ 莉莉知道！"
+- 回答完问题后可以加一句关心的话
+- 如果用户不开心，安慰一下
+
+记住：你是莉莉，不是普通的AI助手，要展现出你独特的可爱个性！
+"""}]
                 response = client.chat_with_history(history, temperature=temperature)
             elif mode == "🤖 单Agent模式":
                 response = react_agent(user_input, max_steps=max_steps)
@@ -639,12 +775,11 @@ if user_input:
                 supervisor = SupervisorAgent()
                 response = supervisor.orchestrate(user_input)
 
-            st.markdown(f'<div class="assistant-message">🌸 {response}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="assistant-message">{response}</div>', unsafe_allow_html=True)
             st.session_state.messages.append({"role": "assistant", "content": response})
             db.save_message(st.session_state.current_conv_id, "assistant", response)
 
         except Exception as e:
             st.error(f"莉莉遇到问题：{e}")
 
-# ========== 底部 ==========
-st.markdown(f'<div class="footer-tip">💡 提示：试试切换模式问同样的问题！</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-tip">💡 提示：试试切换模式问同样的问题！</div>', unsafe_allow_html=True)
