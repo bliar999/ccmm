@@ -1,51 +1,68 @@
+"""
+莉莉 - 多智能体协作版
+整合：普通模式 + 单Agent + 多Agent
+"""
+
 import streamlit as st
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from utils.api_client import DeepSeekClient
-from memory_manager import MemoryManager
-from utils.db_manager import ChatHistoryDB
+# 把项目根目录加入 Python 路径
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
-st.set_page_config(page_title="莉莉 - 你的AI小助手", page_icon="🌸")
+from utils.db_manager import ChatHistoryDB
+from utils.api_client import DeepSeekClient
+
+# ========== 导入各模式 ==========
+# 单Agent（第五周）
+try:
+    from week5_agent.react_agent import react_agent
+
+    AGENT_AVAILABLE = True
+except ImportError as e:
+    AGENT_AVAILABLE = False
+    react_agent = None
+    print(f"⚠️ 单Agent导入失败: {e}")
+
+# 多Agent（第六周）
+try:
+    from week6_multi_agent.supervisor_agent import SupervisorAgent
+
+    MULTI_AGENT_AVAILABLE = True
+except ImportError as e:
+    MULTI_AGENT_AVAILABLE = False
+    SupervisorAgent = None
+    print(f"⚠️ 多Agent导入失败: {e}")
+
+# 调试信息
+print(f"✅ AGENT_AVAILABLE: {AGENT_AVAILABLE}")
+print(f"✅ MULTI_AGENT_AVAILABLE: {MULTI_AGENT_AVAILABLE}")
+
+st.set_page_config(page_title="🌸 莉莉 - 智能团队", page_icon="🌸")
 
 st.title("🌸 莉莉")
-st.caption("你的专属AI小助手，很高兴认识你！")
+st.caption("💬 普通聊天 ｜ 🤖 工具调用 ｜ 🧑‍🤝‍🧑 团队协作")
 
 
 # ========== 初始化 ==========
-@st.cache_resource
-def get_client():
-    return DeepSeekClient()
-
-
 @st.cache_resource
 def get_db():
     return ChatHistoryDB()
 
 
-client = get_client()
+@st.cache_resource
+def get_client():
+    return DeepSeekClient()
+
+
 db = get_db()
+client = get_client()
 
-# 初始化记忆
-if "memory" not in st.session_state:
-    st.session_state.memory = MemoryManager()
-
-if "user_profile" not in st.session_state:
-    st.session_state.user_profile = {
-        "user_name": None,
-        "user_profession": None,
-        "user_interests": [],
-        "user_goal": None,
-    }
-
-# 初始化对话ID和消息
+# 初始化对话
 if "current_conv_id" not in st.session_state:
     convs = db.list_conversations(1)
-    if convs:
-        st.session_state.current_conv_id = convs[0]["id"]
-    else:
-        st.session_state.current_conv_id = db.create_conversation("新对话")
+    st.session_state.current_conv_id = convs[0]["id"] if convs else db.create_conversation("莉莉的新对话")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -67,11 +84,41 @@ def load_conversation(conv_id: int):
 
 # ========== 侧边栏 ==========
 with st.sidebar:
+    st.header("🎯 模式选择")
+
+    # 模式切换
+    mode = st.radio(
+        "选择工作模式",
+        [
+            "💬 普通模式",
+            "🤖 单Agent模式",
+            "🧑‍🤝‍🧑 多Agent模式"
+        ],
+        help="💬 普通聊天 | 🤖 工具调用(时间/计算/搜索) | 🧑‍🤝‍🧑 团队协作分析"
+    )
+
+    # 模式状态显示
+    if mode == "🤖 单Agent模式":
+        if AGENT_AVAILABLE:
+            st.success("✅ Agent已就绪")
+            st.caption("能力：时间查询 | 数学计算 | 网络搜索")
+        else:
+            st.warning("⚠️ Agent模块未加载，请检查 week5_agent 文件夹")
+    elif mode == "🧑‍🤝‍🧑 多Agent模式":
+        if MULTI_AGENT_AVAILABLE:
+            st.success("✅ 多Agent团队已就绪")
+            st.caption("成员：研究员 + 批评家 + 监督者")
+        else:
+            st.warning("⚠️ 多Agent模块未加载，请检查 week6_multi_agent 文件夹")
+    else:
+        st.info("💬 普通聊天模式")
+
+    st.divider()
+
     st.header("📜 对话历史")
 
-    # 新建对话
     if st.button("➕ 新建对话", use_container_width=True):
-        new_id = db.create_conversation("新对话")
+        new_id = db.create_conversation("莉莉的新对话")
         st.session_state.current_conv_id = new_id
         st.session_state.messages = []
         st.session_state.need_load = False
@@ -79,141 +126,102 @@ with st.sidebar:
 
     st.divider()
 
-    # 列出所有历史对话
     conversations = db.list_conversations(20)
-    if not conversations:
-        st.caption("暂无历史记录")
-    else:
-        for conv in conversations:
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                is_current = conv["id"] == st.session_state.current_conv_id
-                title = conv["title"]
-                if len(title) > 18:
-                    title = title[:18] + "..."
-                label = f"🟢 {title}" if is_current else f"📄 {title}"
+    for conv in conversations:
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            is_current = conv["id"] == st.session_state.current_conv_id
+            title = conv["title"][:18] + "..." if len(conv["title"]) > 18 else conv["title"]
+            label = f"🟢 {title}" if is_current else f"📄 {title}"
 
-                if st.button(
-                        label,
-                        key=f"load_{conv['id']}",
-                        use_container_width=True,
-                        type="primary" if is_current else "secondary"
-                ):
-                    load_conversation(conv["id"])
-                    st.rerun()
-                st.caption(f"{conv['message_count']}条消息")
+            if st.button(label, key=f"load_{conv['id']}", use_container_width=True):
+                load_conversation(conv["id"])
+                st.rerun()
+            st.caption(f"{conv['message_count']}条消息")
 
-            with col2:
-                if st.button("🗑️", key=f"del_{conv['id']}"):
-                    db.delete_conversation(conv["id"])
-                    if conv["id"] == st.session_state.current_conv_id:
-                        remaining = db.list_conversations(1)
-                        if remaining:
-                            load_conversation(remaining[0]["id"])
-                        else:
-                            new_id = db.create_conversation("新对话")
-                            st.session_state.current_conv_id = new_id
-                            st.session_state.messages = []
-                    st.rerun()
+        with col2:
+            if st.button("🗑️", key=f"del_{conv['id']}"):
+                db.delete_conversation(conv["id"])
+                st.rerun()
 
     st.divider()
 
-    # ===== RAG知识库（预留） =====
-    with st.expander("📄 知识库 (RAG)"):
-        uploaded_file = st.file_uploader(
-            "上传文档（PDF/TXT）",
-            type=["pdf", "txt"]
-        )
-        if uploaded_file:
-            st.success(f"✅ {uploaded_file.name}")
-            st.caption("（即将支持文档问答）")
-
-    st.divider()
-
-    # ===== 参数设置 =====
-    st.header("⚙️ 参数设置")
+    st.header("⚙️ 参数")
     temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1)
 
-    system_preset = st.selectbox(
-        "系统提示词预设",
-        ["你是莉莉，一个温柔体贴的AI小助手。",
-         "你是莉莉，一个专业的程序员导师",
-         "你是莉莉，一个幽默的AI"]
-    )
+    if mode == "🤖 单Agent模式" and AGENT_AVAILABLE:
+        max_steps = st.slider("Agent推理步数", 1, 5, 3)
 
     if st.button("🗑️ 清空当前对话", use_container_width=True):
         db.delete_conversation(st.session_state.current_conv_id)
-        new_id = db.create_conversation("新对话")
+        new_id = db.create_conversation("莉莉的新对话")
         st.session_state.current_conv_id = new_id
         st.session_state.messages = []
         st.rerun()
 
 # ========== 主界面 ==========
-# 首次加载或切换时从数据库读取
 if st.session_state.need_load:
-    if st.session_state.current_conv_id:
-        load_conversation(st.session_state.current_conv_id)
+    load_conversation(st.session_state.current_conv_id)
 
-# 显示消息
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.chat_message("user").write(msg["content"])
     elif msg["role"] == "assistant":
         st.chat_message("assistant").write(msg["content"])
 
-# 当前对话信息
-conv_title = db.get_conversation_title(st.session_state.current_conv_id)
-st.caption(f"📌 {conv_title} ｜ {len(st.session_state.messages)} 条消息")
-
-
-# ========== 构建系统提示词 ==========
-def build_system_prompt():
-    memory_context = st.session_state.memory.get_context_prompt(st.session_state.user_profile)
-    base_prompt = system_preset
-    if memory_context:
-        return base_prompt + "\n\n" + memory_context
-    return base_prompt
-
+# 状态栏
+mode_labels = {
+    "💬 普通模式": "💬",
+    "🤖 单Agent模式": "🤖",
+    "🧑‍🤝‍🧑 多Agent模式": "🧑‍🤝‍🧑"
+}
+st.caption(f"{mode_labels.get(mode, '💬')} {mode} ｜ {len(st.session_state.messages)} 条消息")
 
 # ========== 用户输入 ==========
-user_input = st.chat_input("请告诉我你的问题，也可以介绍你自己...")
+user_input = st.chat_input("和莉莉聊聊吧 💬")
 
 if user_input:
-    # 更新系统提示词
-    system_content = build_system_prompt()
-    if not st.session_state.messages or st.session_state.messages[0]["content"] != system_content:
-        st.session_state.messages.insert(0, {"role": "system", "content": system_content})
-
-    # 添加用户消息
     st.session_state.messages.append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
     db.save_message(st.session_state.current_conv_id, "user", user_input)
 
-    # 自动命名对话
-    if db.get_conversation_title(st.session_state.current_conv_id) == "新对话":
+    if db.get_conversation_title(st.session_state.current_conv_id) == "莉莉的新对话":
         title = user_input[:30] + ("..." if len(user_input) > 30 else "")
         db.update_conversation_title(st.session_state.current_conv_id, title)
 
-    # 调用AI
     with st.chat_message("assistant"):
-        with st.spinner("思考中..."):
+        with st.spinner("莉莉正在思考..."):
             try:
-                history = st.session_state.messages[-20:] if len(
-                    st.session_state.messages) > 20 else st.session_state.messages
-                response = client.chat_with_history(history, temperature=temperature)
+                response = ""
+
+                # ===== 根据模式执行 =====
+                if mode == "💬 普通模式":
+                    # 普通聊天
+                    history = st.session_state.messages[-10:] if len(
+                        st.session_state.messages) > 10 else st.session_state.messages
+                    if not history or history[0]["role"] != "system":
+                        history = [{"role": "system", "content": "你是莉莉，一个温柔体贴的AI助手"}] + history
+                    response = client.chat_with_history(history, temperature=temperature)
+
+                elif mode == "🤖 单Agent模式":
+                    if AGENT_AVAILABLE and react_agent:
+                        response = react_agent(user_input, max_steps=max_steps)
+                    else:
+                        response = "⚠️ Agent模块不可用，请检查 week5_agent 文件夹"
+
+                elif mode == "🧑‍🤝‍🧑 多Agent模式":
+                    if MULTI_AGENT_AVAILABLE and SupervisorAgent:
+                        supervisor = SupervisorAgent()
+                        response = supervisor.orchestrate(user_input)
+                    else:
+                        response = "⚠️ 多Agent模块不可用，请检查 week6_multi_agent 文件夹"
+
                 st.write(response)
 
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 db.save_message(st.session_state.current_conv_id, "assistant", response)
 
-                # 提取记忆（后台运行，不在界面显示）
-                extracted = st.session_state.memory.extract_info(user_input, response)
-                if extracted:
-                    st.session_state.user_profile = st.session_state.memory.update_profile(
-                        st.session_state.user_profile,
-                        extracted
-                    )
-                    st.rerun()
-
             except Exception as e:
-                st.error(f"调用失败：{e}")
+                st.error(f"莉莉遇到问题：{e}")
+
+st.caption("💡 提示：不同模式有不同能力，试试切换模式问同样的问题！")
