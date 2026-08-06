@@ -1,66 +1,42 @@
 """
-RAG最简版 - 绕过sentence_transformers版本冲突
-使用transformers库直接加载模型
+RAG极简版 - 无需下载任何模型
+使用关键词匹配代替向量检索
 """
 
-from pathlib import Path
-from transformers import AutoTokenizer, AutoModel
-import torch
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
+import sys
 import os
-import time
+from pathlib import Path
+import re
 
-# ==================== 第一步：加载Embedding模型 ====================
-print("🚀 加载Embedding模型...")
-start = time.time()
+# 确保项目根目录在路径中
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+os.chdir(project_root)
 
-# 使用国产模型，国内直连
-model_name = "BAAI/bge-small-zh-v1.5"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModel.from_pretrained(model_name)
+from openai import OpenAI
+from dotenv import load_dotenv
 
-print(f"✅ 模型加载完成，耗时 {time.time() - start:.1f} 秒\n")
+load_dotenv(dotenv_path=project_root / ".env")
 
+client = OpenAI(
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
+    base_url="https://api.deepseek.com/v1"
+)
 
-# ==================== 第二步：定义Embedding函数 ====================
-def encode_texts(texts):
-    """将文本列表转换为向量"""
-    # 分词
-    inputs = tokenizer(
-        texts,
-        padding=True,
-        truncation=True,
-        max_length=512,
-        return_tensors="pt"
-    )
-
-    # 推理
-    with torch.no_grad():
-        outputs = model(**inputs)
-
-    # 取平均池化作为句子向量
-    embeddings = outputs.last_hidden_state.mean(dim=1).numpy()
-
-    # 归一化
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    embeddings = embeddings / norms
-
-    return embeddings
-
-
-# ==================== 第三步：准备示例文档 ====================
-docs_dir = Path("docs")
-docs_dir.mkdir(exist_ok=True)
+# ==================== 加载文档 ====================
+docs_dir = project_root / "week3_rag" / "docs"
+docs_dir.mkdir(parents=True, exist_ok=True)
 
 sample_file = docs_dir / "sample.txt"
+
+# 如果文档不存在，创建示例
 if not sample_file.exists():
-    print("📝 生成示例文档...")
     sample_content = """
 人工智能（AI）是计算机科学的一个分支，致力于创建能够执行通常需要人类智能的任务的系统。
 这些任务包括视觉感知、语音识别、决策制定和语言翻译等。
 
 机器学习是AI的一个子集，它使系统能够从数据中学习并改进，而无需明确编程。
+
 深度学习是机器学习的一个子集，使用多层神经网络来模拟人脑的工作方式。
 
 大语言模型（LLM）如GPT和DeepSeek，是基于深度学习的自然语言处理模型。
@@ -69,56 +45,80 @@ if not sample_file.exists():
 RAG（检索增强生成）是一种将检索系统与生成模型结合的技术。
 它先从外部知识库检索相关信息，再让大模型基于这些信息生成回答，
 可以显著提高回答的准确性和时效性。
+
+向量数据库是RAG系统中的核心组件，用于存储和检索文本的向量表示。
+Chroma是一个轻量级的向量数据库，适合本地开发使用。
 """
     sample_file.write_text(sample_content, encoding="utf-8")
-    print(f"✅ 已生成: {sample_file}\n")
 
-# ==================== 第四步：加载并分割文档 ====================
-print("📄 加载文档...")
+# 加载并分割文档
 content = sample_file.read_text(encoding="utf-8")
-
-# 简单分割：按空行分段
 chunks = [chunk.strip() for chunk in content.split("\n\n") if chunk.strip()]
-print(f"✅ 分割成 {len(chunks)} 个片段\n")
-
-# ==================== 第五步：向量化并建立索引 ====================
-print("🔢 向量化文档...")
-chunk_embeddings = encode_texts(chunks)
-print(f"✅ 向量维度: {chunk_embeddings.shape}\n")
+print(f"📄 加载 {len(chunks)} 个文档片段")
 
 
-# ==================== 第六步：检索函数 ====================
-def search(query, top_k=3):
-    """检索最相关的文档片段"""
-    query_embedding = encode_texts([query])
-    similarities = cosine_similarity(query_embedding, chunk_embeddings)[0]
-    top_indices = np.argsort(similarities)[::-1][:top_k]
+# ==================== 关键词匹配检索（无需模型） ====================
+def keyword_search(query, top_k=3):
+    """
+    基于关键词匹配的检索
+    提取问题中的关键词，在文档中匹配
+    """
+    # 提取关键词（去掉停用词，保留有意义的词）
+    stopwords = {"的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上", "也", "很", "到",
+                 "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这", "那", "它", "他", "她", "们"}
 
+    # 分词（简单中英文分割）
+    words = re.findall(r'[\u4e00-\u9fa5a-zA-Z]+', query)
+    keywords = [w for w in words if w not in stopwords and len(w) > 1]
+
+    # 如果没有关键词，直接返回前几个片段
+    if not keywords:
+        return [{"content": chunks[i], "score": 1.0 - i * 0.1} for i in range(min(top_k, len(chunks)))]
+
+    # 计算每个片段的关键词匹配分数
+    scores = []
+    for chunk in chunks:
+        score = 0
+        for kw in keywords:
+            # 统计关键词在片段中出现的次数
+            count = chunk.count(kw)
+            if count > 0:
+                score += count * 2
+            # 也检查是否包含同义词或相关词
+            if kw in chunk:
+                score += 1
+        scores.append(score)
+
+    # 按分数排序
+    scored_chunks = list(zip(chunks, scores))
+    scored_chunks.sort(key=lambda x: x[1], reverse=True)
+
+    # 返回top_k结果
     results = []
-    for idx in top_indices:
-        results.append({
-            "content": chunks[idx],
-            "score": float(similarities[idx])
-        })
-    return results
+    for i, (chunk, score) in enumerate(scored_chunks[:top_k]):
+        if score > 0:
+            results.append({"content": chunk, "score": float(score) / 10 if score > 0 else 0})
+        else:
+            # 如果没有匹配，返回前几个片段（保底）
+            if i < len(chunks):
+                results.append({"content": chunks[i], "score": 0.1})
+
+    return results if results else [{"content": chunks[i], "score": 0.1} for i in range(min(top_k, len(chunks)))]
 
 
-# ==================== 第七步：RAG问答 ====================
+def search(query, top_k=3):
+    """检索接口 - 与向量检索保持一致"""
+    return keyword_search(query, top_k)
+
+
+# ==================== RAG问答函数 ====================
 def rag_ask(question):
     """基于检索结果回答问题"""
-    # 1. 检索相关片段
+    if not chunks:
+        return "知识库为空，请先上传文档"
+
     results = search(question, top_k=3)
     context = "\n\n".join([r["content"] for r in results])
-
-    # 2. 调用DeepSeek
-    from openai import OpenAI
-    from dotenv import load_dotenv
-
-    load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
-    client = OpenAI(
-        api_key=os.getenv("DEEPSEEK_API_KEY"),
-        base_url="https://api.deepseek.com/v1"
-    )
 
     prompt = f"""
 请根据以下参考内容回答用户的问题。如果参考内容中没有相关信息，请直接说"根据现有文档无法回答该问题"。
@@ -132,45 +132,17 @@ def rag_ask(question):
 【回答】
 """
 
-    response = client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3
-    )
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"调用大模型失败：{e}"
 
-    return response.choices[0].message.content
 
-
-# ==================== 运行测试 ====================
-print("=" * 60)
-print("🔍 检索测试")
-print("=" * 60)
-
-test_questions = [
-    "什么是人工智能？",
-    "RAG是什么技术？",
-]
-
-for q in test_questions:
-    print(f"\n📌 问题: {q}")
-    results = search(q, top_k=2)
-    for i, r in enumerate(results):
-        print(f"  [{i + 1}] (相似度: {r['score']:.3f}) {r['content'][:50]}...")
-
-print("\n" + "=" * 60)
-print("💬 RAG问答测试")
-print("=" * 60)
-
-questions = [
-    "什么是人工智能？",
-    "RAG技术有什么作用？",
-    "今天天气怎么样？"
-]
-
-for q in questions:
-    print(f"\n📌 问题: {q}")
-    print("-" * 40)
-    answer = rag_ask(q)
-    print(f"🤖 {answer}")
-
-print("\n✅ 完成！")
+# ==================== 导出供其他模块使用 ====================
+encode_texts = None
+chunk_embeddings = None

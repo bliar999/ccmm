@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils.api_client import DeepSeekClient
 from memory_manager import MemoryManager
-from db_manager import ChatHistoryDB
+from utils.db_manager import ChatHistoryDB
 
 st.set_page_config(page_title="莉莉 - 你的AI小助手", page_icon="🌸")
 

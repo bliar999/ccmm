@@ -5,7 +5,7 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils.api_client import DeepSeekClient
-from db_manager import ChatHistoryDB
+from utils.db_manager import ChatHistoryDB
 
 st.set_page_config(page_title="📚 有历史的AI对话", page_icon="📚")
 

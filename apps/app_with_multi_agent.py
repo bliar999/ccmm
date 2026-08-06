@@ -1,6 +1,5 @@
 """
-莉莉 - 带RAG功能的AI助手
-集成文档问答 + 对话历史
+莉莉 - 多智能体协作版
 """
 
 import streamlit as st
@@ -9,36 +8,31 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.api_client import DeepSeekClient
-from db_manager import ChatHistoryDB
-from week3_rag.rag_minimal import search, chunks, encode_texts, chunk_embeddings
-from week3_rag.rag_with_memory import DialogueRAG
+from utils.db_manager import ChatHistoryDB
+from week6_multi_agent.supervisor_agent import SupervisorAgent
+from week6_multi_agent.workflow_orchestrator import WorkflowOrchestrator
+from week6_multi_agent.researcher_agent import ResearcherAgent
+from week6_multi_agent.critic_agent import CriticAgent
 
-st.set_page_config(page_title="🌸 莉莉 - AI小助手", page_icon="🌸")
+st.set_page_config(page_title="🌸 莉莉 - 多智能体团队", page_icon="🌸")
 
-st.title("🌸 莉莉")
-st.caption("我能回答文档问题，也能记住我们的对话 💕")
+st.title("🌸 莉莉（团队版）")
+st.caption("我身后有一个团队：研究员 + 批评家 + 监督者 🤝")
 
 
 # ========== 初始化 ==========
-@st.cache_resource
-def get_client():
-    return DeepSeekClient()
-
-
 @st.cache_resource
 def get_db():
     return ChatHistoryDB()
 
 
 @st.cache_resource
-def get_rag():
-    return DialogueRAG()
+def get_supervisor():
+    return SupervisorAgent()
 
 
-client = get_client()
 db = get_db()
-rag = get_rag()
+supervisor = get_supervisor()
 
 # 初始化对话
 if "current_conv_id" not in st.session_state:
@@ -61,8 +55,6 @@ def load_conversation(conv_id: int):
         for msg in messages
     ]
     st.session_state.need_load = False
-    # 清空RAG历史
-    rag.clear()
 
 
 # ========== 侧边栏 ==========
@@ -74,7 +66,6 @@ with st.sidebar:
         st.session_state.current_conv_id = new_id
         st.session_state.messages = []
         st.session_state.need_load = False
-        rag.clear()
         st.rerun()
 
     st.divider()
@@ -99,26 +90,27 @@ with st.sidebar:
 
     st.divider()
 
-    st.header("📄 知识库")
-    st.caption(f"已加载 {len(chunks)} 个文档片段")
-
-    # 显示文档片段预览
-    with st.expander("查看文档片段"):
-        for i, chunk in enumerate(chunks[:5]):
-            st.text(f"[{i + 1}] {chunk[:60]}...")
+    st.header("🧑‍🤝‍🧑 团队模式")
+    mode = st.radio(
+        "选择协作模式",
+        ["🧠 监督者模式", "🔬 研究员+批评家", "⚡ 工作流编排"],
+        help="监督者：分配任务给团队；研究员+批评家：研究和评阅；工作流：顺序执行"
+    )
 
     st.divider()
 
-    st.header("⚙️ 参数设置")
-    temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1)
-    use_rag = st.toggle("📚 启用RAG文档问答", value=True)
+    st.header("👥 团队成员")
+    st.success("✅ 监督者")
+    st.success("✅ 研究员")
+    st.success("✅ 批评家")
+
+    st.divider()
 
     if st.button("🗑️ 清空当前对话", use_container_width=True):
         db.delete_conversation(st.session_state.current_conv_id)
         new_id = db.create_conversation("莉莉的新对话")
         st.session_state.current_conv_id = new_id
         st.session_state.messages = []
-        rag.clear()
         st.rerun()
 
 # ========== 主界面 ==========
@@ -132,29 +124,39 @@ for msg in st.session_state.messages:
         st.chat_message("assistant").write(msg["content"])
 
 # ========== 用户输入 ==========
-user_input = st.chat_input("和莉莉说说你的问题吧 💬")
+user_input = st.chat_input("和莉莉团队聊聊吧 💬")
 
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
     db.save_message(st.session_state.current_conv_id, "user", user_input)
 
-    # 自动命名
     if db.get_conversation_title(st.session_state.current_conv_id) == "莉莉的新对话":
         title = user_input[:30] + ("..." if len(user_input) > 30 else "")
         db.update_conversation_title(st.session_state.current_conv_id, title)
 
     with st.chat_message("assistant"):
-        with st.spinner("莉莉正在思考..."):
+        with st.spinner("莉莉团队正在协作..."):
             try:
-                if use_rag:
-                    # 使用RAG模式
-                    response = rag.ask(user_input)
+                if mode == "🧠 监督者模式":
+                    result = supervisor.orchestrate(user_input)
+                    response = result["final_answer"]
+                elif mode == "🔬 研究员+批评家":
+                    from week6_multi_agent.researcher_agent import ResearcherAgent
+                    from week6_multi_agent.critic_agent import CriticAgent
+
+                    r = ResearcherAgent()
+                    c = CriticAgent()
+                    research = r.think(user_input)
+                    critique = c.think(f"评阅：{research}")
+                    response = f"【研究】\n{research}\n\n【评阅】\n{critique}"
                 else:
-                    # 普通模式
-                    history = st.session_state.messages[-10:] if len(
-                        st.session_state.messages) > 10 else st.session_state.messages
-                    response = client.chat_with_history(history, temperature=temperature)
+                    # 工作流模式
+                    workflow = WorkflowOrchestrator()
+                    workflow.add_step(ResearcherAgent(), user_input)
+                    workflow.add_step(CriticAgent(), f"评阅研究结果", depends_on=["step_0"])
+                    result = workflow.run(user_input)
+                    response = result["summary"]
 
                 st.write(response)
 
@@ -162,8 +164,6 @@ if user_input:
                 db.save_message(st.session_state.current_conv_id, "assistant", response)
 
             except Exception as e:
-                st.error(f"莉莉遇到了一点小问题：{e}")
+                st.error(f"莉莉团队遇到问题：{e}")
 
-# 显示当前状态
-st.caption(
-    f"📌 当前对话: {db.get_conversation_title(st.session_state.current_conv_id)} ｜ {len(st.session_state.messages)} 条消息")
+st.caption(f"📌 {db.get_conversation_title(st.session_state.current_conv_id)} ｜ {len(st.session_state.messages)} 条消息")
