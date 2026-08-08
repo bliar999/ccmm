@@ -27,33 +27,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
-import streamlit as st
 
-# 强制布局居中 CSS
-st.markdown("""
-<style>
-    /* 把全屏变成 Flex 布局，直接居中内容 */
-    .stApp {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-    }
-
-    /* 如果卡片还在它自己的容器里，把这个容器也强制居中 */
-    .block-container {
-        padding-top: 0 !important; /* 去掉上方默认留白 */
-        max-width: 400px !important;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin: 0 auto !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-
-# 你的其他代码...
 
 
 # ==================== 用户认证系统 ====================
