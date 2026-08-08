@@ -1,5 +1,5 @@
 """
-莉莉 - 稳定版
+莉莉 - 稳定版（修复导入错误 + 移动端底栏优化）
 """
 
 import streamlit as st
@@ -353,15 +353,17 @@ class SupervisorAgent(BaseAgent):
         return summary
 
 
-# ==================== 动态CSS ====================
+# ==================== 动态CSS (修复了文字颜色) ====================
 
 def load_css():
     st.markdown("""
     <style>
     .stApp { background: linear-gradient(135deg, #fce4ec, #f3e5f5, #e8eaf6); }
+
+    /* 用户气泡 - 改为深蓝色背景+白色文字 */
     .user-message {
-        background: white;
-        color: black;
+        background: linear-gradient(135deg, #7c4dff, #536dfe);
+        color: white !important; 
         padding: 12px 18px;
         border-radius: 18px 18px 4px 18px;
         margin: 8px 0;
@@ -369,9 +371,11 @@ def load_css():
         float: right;
         clear: both;
     }
+
+    /* 机器人气泡 - 改为白底黑字 (修复了之前白底白字的问题) */
     .assistant-message {
         background: white;
-        color:black;
+        color: #333333 !important; /* 强制文字为深色 */
         padding: 14px 20px;
         border-radius: 18px 18px 18px 4px;
         margin: 8px 0;
@@ -381,6 +385,7 @@ def load_css():
         box-shadow: 0 4px 24px rgba(0,0,0,0.05);
         border: 1px solid #f3e5f5;
     }
+
     .login-container {
         max-width: 400px;
         margin: 60px auto;
@@ -406,6 +411,7 @@ def load_css():
         font-size: 4rem;
         margin-bottom: 12px;
     }
+
     .stButton button {
         border-radius: 30px !important;
         background: linear-gradient(135deg, #ec407a, #ab47bc) !important;
@@ -414,9 +420,18 @@ def load_css():
         padding: 10px 24px !important;
         font-weight: 600 !important;
     }
+
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     .stDeployButton {display: none;}
+
+    /* 针对手机端的优化：隐藏默认的汉堡菜单 */
+    @media (max-width: 768px) {
+        [data-testid="stSidebarNav"] {display: none !important;}
+        .block-container {
+            padding-bottom: 100px !important; /* 给手机底部的快捷栏留位置 */
+        }
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -485,49 +500,11 @@ def show_login_page():
                         else:
                             st.error(f"❌ {msg}")
 
-# ================= 手机端简易控制栏 =================
-# 获取当前 URL 参数，判断是否在手机上（简单判断）
-import streamlit as st
 
-# 这一段是你侧边栏原本的逻辑（在电脑端起作用）
-# ... 你的 with st.sidebar: ...
-
-# ----------------- 手机端专属 UI -----------------
-# 我们在主页面加一行横向按钮
-c1, c2, c3 = st.columns([2, 2, 1])
-
-with c1:
-    # 新建对话按钮
-    if st.button("➕ 新对话", use_container_width=True):
-        # 在这里写你的新建逻辑，通常就是清空当前消息列表并刷新
-        # 假设你的对话存在 st.session_state.messages
-        st.session_state.messages = []
-        st.rerun()
-
-with c2:
-    # 模式切换下拉菜单（手机端手指更友好）
-    current_mode = st.session_state.get('mode', '普通模式')
-    new_mode = st.selectbox(
-        "选择模式",
-        ["普通模式", "单Agent模式", "多Agent模式"],
-        index=["普通模式", "单Agent模式", "多Agent模式"].index(current_mode),
-        label_visibility="collapsed" # 隐藏标签，节省屏幕空间
-    )
-    if new_mode != current_mode:
-        st.session_state.mode = new_mode
-        st.rerun() # 切换模式通常需要刷新页面重置状态
-
-with c3:
-    # 退出登录按钮
-    if st.button("🚪退出", type="primary", use_container_width=True):
-        # 写你的退出逻辑
-        st.session_state.clear()
-        st.rerun()
-# ==================================================
 # ==================== 主应用 ====================
 
 def main_app():
-    st.markdown(f"<div style='color: black; font-size: ...'>🌸 欢迎回来，{st.session_state.username}!</div>", unsafe_allow_html=True)
+    st.markdown("🌸 欢迎回来，" + st.session_state.username + "！")
 
     @st.cache_resource
     def get_db():
@@ -557,6 +534,10 @@ def main_app():
     if "need_load" not in st.session_state:
         st.session_state.need_load = True
 
+    # 保存当前侧边栏选择的模式
+    if "current_mode" not in st.session_state:
+        st.session_state.current_mode = "💬 普通模式"
+
     def load_conversation(conv_id: int):
         st.session_state.current_conv_id = conv_id
         messages = db.get_conversation(conv_id)
@@ -573,10 +554,15 @@ def main_app():
 
         st.divider()
 
+        # 侧边栏模式选择
         mode = st.radio(
             "选择模式",
-            ["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"]
+            ["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"],
+            index=["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"].index(st.session_state.current_mode)
         )
+        if mode != st.session_state.current_mode:
+            st.session_state.current_mode = mode
+            st.rerun()
 
         st.divider()
 
@@ -621,6 +607,7 @@ def main_app():
     if st.session_state.need_load:
         load_conversation(st.session_state.current_conv_id)
 
+    # 渲染聊天记录
     for msg in st.session_state.messages:
         if msg["role"] == "user":
             st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
@@ -640,12 +627,12 @@ def main_app():
 
         with st.spinner("莉莉正在思考..."):
             try:
-                if mode == "💬 普通模式":
+                if st.session_state.current_mode == "💬 普通模式":
                     history = st.session_state.messages[-10:]
                     if not history or history[0]["role"] != "system":
                         history = [{"role": "system", "content": "你是莉莉，一个温柔可爱的小花仙助手"}] + history
                     response = client.chat_with_history(history, temperature=temperature)
-                elif mode == "🤖 单Agent模式":
+                elif st.session_state.current_mode == "🤖 单Agent模式":
                     response = react_agent(user_input, max_steps=max_steps, cost_monitor=cost_monitor)
                 else:
                     supervisor = SupervisorAgent()
@@ -657,6 +644,47 @@ def main_app():
 
             except Exception as e:
                 st.error(f"莉莉遇到问题：{e}")
+
+    # ==================== 移动端底部工具栏 (新增) ====================
+    with st.container():
+        st.markdown("---")
+        c1, c2, c3, c4, c5 = st.columns([1, 2, 2, 2, 1])
+
+        with c1:
+            # 新建对话
+            if st.button("➕", key="mobile_new_chat", help="手机端新建对话"):
+                new_id = db.create_conversation("莉莉的新对话")
+                st.session_state.current_conv_id = new_id
+                st.session_state.messages = []
+                st.session_state.need_load = False
+                st.rerun()
+
+        with c2:
+            # 切换模式（下拉菜单 - 手机专用）
+            mobile_mode = st.selectbox(
+                "模式",
+                ["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"],
+                index=["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"].index(st.session_state.current_mode),
+                label_visibility="collapsed",
+                key="mobile_mode_selector"
+            )
+            if mobile_mode != st.session_state.current_mode:
+                st.session_state.current_mode = mobile_mode
+                st.session_state.messages = []  # 切换模式清空对话
+                st.rerun()
+
+        with c4:
+            # 点击刷新/查看历史 (利用 Streamlit 自带的缓存清理机制)
+            if st.button("🔄", key="mobile_refresh", help="刷新当前对话"):
+                st.rerun()
+
+        with c5:
+            # 退出登录
+            if st.button("🚪", key="mobile_logout", help="手机端退出"):
+                st.session_state.logged_in = False
+                st.session_state.username = None
+                st.session_state.messages = []
+                st.rerun()
 
 
 # ==================== 主入口 ====================
@@ -673,7 +701,6 @@ if not st.session_state.logged_in:
     show_login_page()
 else:
     main_app()
-
 
 
 
