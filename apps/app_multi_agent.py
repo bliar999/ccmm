@@ -361,7 +361,7 @@ def load_css():
     .stApp { background: linear-gradient(135deg, #fce4ec, #f3e5f5, #e8eaf6); }
     .user-message {
         background: linear-gradient(135deg, #7c4dff, #536dfe);
-        color: white;
+        color: black;
         padding: 12px 18px;
         border-radius: 18px 18px 4px 18px;
         margin: 8px 0;
@@ -371,6 +371,7 @@ def load_css():
     }
     .assistant-message {
         background: white;
+        color:black;
         padding: 14px 20px;
         border-radius: 18px 18px 18px 4px;
         margin: 8px 0;
