@@ -1,5 +1,5 @@
 """
-莉莉 - 完整版（含用户认证 + 真实API）
+莉莉 - 完整版（含用户认证 + 真实API + 成本监控）
 """
 
 import streamlit as st
@@ -22,6 +22,7 @@ sys.path.insert(0, str(project_root))
 from utils.db_manager import ChatHistoryDB
 from utils.api_client import DeepSeekClient
 from utils.api_tools import get_weather, search, get_weather_tool_desc, get_search_tool_desc
+from utils.cost_monitor import CostMonitor
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -218,7 +219,7 @@ def execute_tool(tool_name: str, arguments: dict):
         return {"error": f"工具执行失败: {str(e)}"}
 
 
-def react_agent(question: str, max_steps: int = 3):
+def react_agent(question: str, max_steps: int = 3, cost_monitor=None):
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
         try:
@@ -254,6 +255,15 @@ def react_agent(question: str, max_steps: int = 3):
                 tool_choice="auto",
                 temperature=0.3
             )
+
+            # 记录Token消耗
+            if cost_monitor and hasattr(response, 'usage'):
+                cost_monitor.log_usage(
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                    model="deepseek-chat"
+                )
+
         except Exception as e:
             return f"调用API失败：{str(e)}"
 
@@ -710,8 +720,14 @@ def main_app():
     def get_client():
         return DeepSeekClient()
 
+    @st.cache_resource
+    def get_cost_monitor():
+        user_id = auth.get_user_id(st.session_state.username)
+        return CostMonitor(user_id=user_id)
+
     db = get_db()
     client = get_client()
+    cost_monitor = get_cost_monitor()
 
     if "current_conv_id" not in st.session_state:
         convs = db.list_conversations(1)
@@ -807,6 +823,53 @@ def main_app():
 
         st.divider()
 
+        # ===== 成本监控仪表盘 =====
+        st.markdown("### 💰 今日用量")
+        today = cost_monitor.get_today_usage()
+        budget = cost_monitor.get_daily_budget()
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("💬 调用", today["call_count"])
+        with col2:
+            st.metric("🔤 Token", cost_monitor.format_tokens(today["total_tokens"]))
+        with col3:
+            st.metric("💰 费用", f"¥{cost_monitor.format_cost(today['total_cost'])}")
+
+        if budget["budget"] > 0:
+            st.progress(
+                min(budget["percentage"] / 100, 1.0),
+                text=f"日预算 ¥{budget['budget']} | 已用 ¥{cost_monitor.format_cost(budget['used'])}"
+            )
+
+        with st.expander("📊 查看详细统计"):
+            weekly = cost_monitor.get_weekly_usage()
+            monthly = cost_monitor.get_monthly_usage()
+            all_time = cost_monitor.get_all_time_usage()
+
+            st.markdown("**📅 本周**")
+            st.write(
+                f"Token: {cost_monitor.format_tokens(weekly['total_tokens'])} | 费用: ¥{cost_monitor.format_cost(weekly['total_cost'])} | 调用: {weekly['call_count']}次")
+
+            st.markdown("**📆 本月**")
+            st.write(
+                f"Token: {cost_monitor.format_tokens(monthly['total_tokens'])} | 费用: ¥{cost_monitor.format_cost(monthly['total_cost'])} | 调用: {monthly['call_count']}次")
+
+            st.markdown("**📈 总计**")
+            st.write(
+                f"Token: {cost_monitor.format_tokens(all_time['total_tokens'])} | 费用: ¥{cost_monitor.format_cost(all_time['total_cost'])} | 调用: {all_time['call_count']}次")
+
+            trend = cost_monitor.get_daily_trend(7)
+            if trend:
+                st.markdown("**📉 近7天趋势**")
+                max_tokens = max([d['tokens'] for d in trend]) if trend else 1
+                for day in trend:
+                    bar = "█" * int(day['tokens'] / max_tokens * 20) if max_tokens > 0 else ""
+                    st.write(
+                        f"{day['date']}: {bar} {cost_monitor.format_tokens(day['tokens'])} (¥{cost_monitor.format_cost(day['cost'])})")
+
+        st.divider()
+
         st.markdown("### ⚙️ 参数")
         temperature = st.slider("🎨 创造力", 0.0, 2.0, 0.7, 0.1)
         if mode == "🤖 单Agent模式":
@@ -868,8 +931,17 @@ def main_app():
 记住：你是莉莉，不是普通的AI助手，要展现出你独特的可爱个性！
 """}]
                     response = client.chat_with_history(history, temperature=temperature)
+
+                    # 普通模式也记录Token（估算）
+                    estimated_tokens = len(user_input) // 2 + len(response) // 2
+                    cost_monitor.log_usage(
+                        input_tokens=estimated_tokens,
+                        output_tokens=estimated_tokens,
+                        model="deepseek-chat"
+                    )
+
                 elif mode == "🤖 单Agent模式":
-                    response = react_agent(user_input, max_steps=max_steps)
+                    response = react_agent(user_input, max_steps=max_steps, cost_monitor=cost_monitor)
                 else:
                     supervisor = SupervisorAgent()
                     response = supervisor.orchestrate(user_input)
@@ -898,7 +970,6 @@ if not st.session_state.logged_in:
     show_login_page()
 else:
     main_app()
-
 
 
 
