@@ -3,6 +3,41 @@
 """
 
 import streamlit as st
+
+# --- 强制修复移动端侧边栏打开按钮 ---
+st.markdown("""
+<style>
+    /* 隐藏 Streamlit 自带的顶部菜单（防止重复） */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+
+    /* 自定义一个悬浮在右下角的按钮 */
+    .sidebar-trigger-btn {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 99999;
+        background-color: #ff4b4b;
+        color: white;
+        border: none;
+        border-radius: 50px;
+        padding: 12px 20px;
+        font-size: 16px;
+        font-weight: bold;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        cursor: pointer;
+    }
+    .sidebar-trigger-btn:hover {
+        background-color: #e63e3e;
+    }
+</style>
+
+<!-- 这个按钮使用了 Streamlit 内部 API 触发侧边栏展开 -->
+<button class="sidebar-trigger-btn" onclick="window.parent.document.querySelector('[data-testid=stSidebar]').style.width='300px'; window.parent.document.querySelector('[data-testid=stSidebar]').style.transform='translateX(0%)';">
+    ☰ 菜单
+</button>
+""", unsafe_allow_html=True)
+# -----------------------------
 import sys
 from pathlib import Path
 import json
@@ -27,31 +62,6 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
-import streamlit as st
-
-# 针对手机端侧边栏显示问题的修复 CSS
-st.markdown("""
-<style>
-    /* 确保在手机小屏幕上，折叠菜单图标依然存在且可点击 */
-    @media (max-width: 768px) {
-        .css-1vq05ow, .css-1d391kg, .css-1l02w8i {
-            display: block !important;
-        }
-        [data-testid="stSidebarNav"] {
-            display: block !important;
-        }
-        /* 让汉堡菜单有个背景色，避免看不见 */
-        .stApp .css-1vq05ow {
-            background-color: rgba(255,255,255,0.9) !important;
-            padding: 10px !important;
-            border-radius: 5px !important;
-        }
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# 下面是你原本的程序逻辑...
-
 
 
 # ==================== 用户认证系统 ====================
