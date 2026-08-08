@@ -436,7 +436,7 @@ def show_login_page():
         <div class="login-container">
             <div class="lili-icon">🌸</div>
             <h1>莉莉的花园</h1>
-            <div class="subtitle">登录进入你的专属花园</div>
+            <div class="subtitle">登录进入你的专属AI花园</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
