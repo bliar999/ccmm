@@ -360,7 +360,7 @@ def load_css():
     <style>
     .stApp { background: linear-gradient(135deg, #fce4ec, #f3e5f5, #e8eaf6); }
     .user-message {
-        background: linear-gradient(135deg, #7c4dff, #536dfe);
+        background: white;
         color: black;
         padding: 12px 18px;
         border-radius: 18px 18px 4px 18px;
@@ -489,7 +489,7 @@ def show_login_page():
 # ==================== 主应用 ====================
 
 def main_app():
-    st.markdown("🌸 欢迎回来，" + st.session_state.username + "！")
+    st.markdown("🌸 欢迎回来，" + st.session_state.username + "！",unsafe_allow_html=True)
 
     @st.cache_resource
     def get_db():
