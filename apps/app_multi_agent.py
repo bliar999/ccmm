@@ -3,41 +3,6 @@
 """
 
 import streamlit as st
-
-# --- 强制修复移动端侧边栏打开按钮 ---
-st.markdown("""
-<style>
-    /* 隐藏 Streamlit 自带的顶部菜单（防止重复） */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-
-    /* 自定义一个悬浮在右下角的按钮 */
-    .sidebar-trigger-btn {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        z-index: 99999;
-        background-color: #ff4b4b;
-        color: white;
-        border: none;
-        border-radius: 50px;
-        padding: 12px 20px;
-        font-size: 16px;
-        font-weight: bold;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        cursor: pointer;
-    }
-    .sidebar-trigger-btn:hover {
-        background-color: #e63e3e;
-    }
-</style>
-
-<!-- 这个按钮使用了 Streamlit 内部 API 触发侧边栏展开 -->
-<button class="sidebar-trigger-btn" onclick="window.parent.document.querySelector('[data-testid=stSidebar]').style.width='300px'; window.parent.document.querySelector('[data-testid=stSidebar]').style.transform='translateX(0%)';">
-    ☰ 菜单
-</button>
-""", unsafe_allow_html=True)
-# -----------------------------
 import sys
 from pathlib import Path
 import json
@@ -520,7 +485,45 @@ def show_login_page():
                         else:
                             st.error(f"❌ {msg}")
 
+# ================= 手机端简易控制栏 =================
+# 获取当前 URL 参数，判断是否在手机上（简单判断）
+import streamlit as st
 
+# 这一段是你侧边栏原本的逻辑（在电脑端起作用）
+# ... 你的 with st.sidebar: ...
+
+# ----------------- 手机端专属 UI -----------------
+# 我们在主页面加一行横向按钮
+c1, c2, c3 = st.columns([2, 2, 1])
+
+with c1:
+    # 新建对话按钮
+    if st.button("➕ 新对话", use_container_width=True):
+        # 在这里写你的新建逻辑，通常就是清空当前消息列表并刷新
+        # 假设你的对话存在 st.session_state.messages
+        st.session_state.messages = []
+        st.rerun()
+
+with c2:
+    # 模式切换下拉菜单（手机端手指更友好）
+    current_mode = st.session_state.get('mode', '普通模式')
+    new_mode = st.selectbox(
+        "选择模式",
+        ["普通模式", "单Agent模式", "多Agent模式"],
+        index=["普通模式", "单Agent模式", "多Agent模式"].index(current_mode),
+        label_visibility="collapsed" # 隐藏标签，节省屏幕空间
+    )
+    if new_mode != current_mode:
+        st.session_state.mode = new_mode
+        st.rerun() # 切换模式通常需要刷新页面重置状态
+
+with c3:
+    # 退出登录按钮
+    if st.button("🚪退出", type="primary", use_container_width=True):
+        # 写你的退出逻辑
+        st.session_state.clear()
+        st.rerun()
+# ==================================================
 # ==================== 主应用 ====================
 
 def main_app():
