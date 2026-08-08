@@ -27,6 +27,30 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
+import streamlit as st
+
+# 针对手机端侧边栏显示问题的修复 CSS
+st.markdown("""
+<style>
+    /* 确保在手机小屏幕上，折叠菜单图标依然存在且可点击 */
+    @media (max-width: 768px) {
+        .css-1vq05ow, .css-1d391kg, .css-1l02w8i {
+            display: block !important;
+        }
+        [data-testid="stSidebarNav"] {
+            display: block !important;
+        }
+        /* 让汉堡菜单有个背景色，避免看不见 */
+        .stApp .css-1vq05ow {
+            background-color: rgba(255,255,255,0.9) !important;
+            padding: 10px !important;
+            border-radius: 5px !important;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# 下面是你原本的程序逻辑...
 
 
 
