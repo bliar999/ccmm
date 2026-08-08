@@ -1,5 +1,5 @@
 """
-莉莉 - 稳定版（强制显示电脑端侧边栏 + 移动端适配）
+莉莉 - 稳定版（强制侧边栏修复）
 """
 
 import streamlit as st
@@ -323,7 +323,7 @@ class SupervisorAgent(BaseAgent):
         return summary
 
 
-# ==================== 动态CSS (重置与修复) ====================
+# ==================== 动态CSS (彻底修复) ====================
 
 def load_css():
     st.markdown("""
@@ -331,7 +331,7 @@ def load_css():
     /* 页面背景 */
     .stApp { background: linear-gradient(135deg, #fce4ec, #f3e5f5, #e8eaf6); }
 
-    /* 聊天气泡：不再使用 float 浮动，确保能正常随页面流 */
+    /* 聊天气泡：白底黑字 */
     .user-message {
         background: linear-gradient(135deg, #7c4dff, #536dfe);
         color: white !important; 
@@ -345,7 +345,7 @@ def load_css():
     }
     .assistant-message {
         background: white;
-        color: #333333 !important; 
+        color: #333333 !important; /* 强制深色文字 */
         padding: 14px 20px;
         border-radius: 18px 18px 18px 4px;
         margin: 8px 0;
@@ -367,22 +367,9 @@ def load_css():
         border-radius: 30px;
         box-shadow: 0 8px 40px rgba(0,0,0,0.08);
     }
-    .login-container h1 {
-        text-align: center;
-        color: #4a148c;
-        font-size: 2.2rem;
-    }
-    .login-container .subtitle {
-        text-align: center;
-        color: #888;
-        font-size: 0.9rem;
-        margin-bottom: 24px;
-    }
-    .login-container .lili-icon {
-        text-align: center;
-        font-size: 4rem;
-        margin-bottom: 12px;
-    }
+    .login-container h1 { text-align: center; color: #4a148c; font-size: 2.2rem; }
+    .login-container .subtitle { text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 24px; }
+    .login-container .lili-icon { text-align: center; font-size: 4rem; margin-bottom: 12px; }
 
     /* 按钮美化 */
     .stButton button {
@@ -394,31 +381,24 @@ def load_css():
         font-weight: 600 !important;
     }
 
-    /* 隐藏不必要元素 */
+    /* 隐藏自带的菜单和页脚 */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stDeployButton {display: none;}
 
-    /* ======= 关键修复：强制侧边栏不被 CSS 隐藏 ======= */
-    /* 确保不会因为 Flex 居中而挤掉侧边栏 */
-    .stApp {
-        display: block !important; 
-    }
-    .block-container {
-        padding-top: 1rem !important;
-    }
-    [data-testid="stSidebar"] {
-        display: block !important;
-        flex: 0 0 21rem !important; /* 强制侧边栏占据 21rem 宽度 */
-        width: 21rem !important;
+    /* 电脑大屏强制侧边栏显示 */
+    @media (min-width: 769px) {
+        [data-testid="stSidebar"] {
+            display: block !important;
+            flex: 0 0 21rem !important;
+            width: 21rem !important;
+        }
     }
 
-    /* 手机端隐藏侧边栏，使用底部菜单 */
+    /* 手机小屏给悬浮按钮留位置 */
     @media (max-width: 768px) {
-        [data-testid="stSidebar"] {
-            display: none !important;
-        }
         .block-container {
+            padding-top: 1rem !important;
             padding-bottom: 100px !important; 
         }
         .stChatInput {
@@ -458,7 +438,6 @@ def show_login_page():
                 username = st.text_input("用户名", placeholder="请输入用户名", key="login_user")
                 password = st.text_input("密码", type="password", placeholder="请输入密码", key="login_pass")
                 submitted = st.form_submit_button("🌸 登录", use_container_width=True)
-
                 if submitted:
                     if username and password:
                         success, msg = auth.login(username, password)
@@ -478,7 +457,6 @@ def show_login_page():
                 confirm_password = st.text_input("确认密码", type="password", placeholder="再次输入密码",
                                                  key="reg_confirm")
                 submitted = st.form_submit_button("🌱 注册", use_container_width=True)
-
                 if submitted:
                     if not new_username or not new_password:
                         st.warning("请填写完整信息")
@@ -498,6 +476,55 @@ def show_login_page():
 
 def main_app():
     st.markdown("🌸 欢迎回来，" + st.session_state.username + "！")
+
+    # ===== 🆕 新增：手动添加的悬浮侧边栏打开按钮 (仅小屏显示) =====
+    st.markdown("""
+    <style>
+    .sidebar-toggle-btn {
+        position: fixed;
+        top: 80px;
+        left: 15px;
+        z-index: 99999;
+        background-color: #ab47bc;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 45px;
+        height: 45px;
+        font-size: 22px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    .sidebar-toggle-btn:hover {
+        transform: scale(1.1);
+        background-color: #8e24aa;
+    }
+    /* 在电脑上隐藏这个悬浮球 */
+    @media (min-width: 769px) {
+        .sidebar-toggle-btn {
+            display: none !important;
+        }
+    }
+    </style>
+
+    <!-- JS 点击事件：强行滑出/收回侧边栏 -->
+    <button class="sidebar-toggle-btn" onclick="
+        var sidebar = window.parent.document.querySelector('[data-testid=stSidebar]');
+        if(sidebar.style.transform === 'translateX(0px)' || sidebar.style.transform === '') {
+            sidebar.style.transform = 'translateX(-100%)';
+            sidebar.style.transition = 'transform 0.3s ease-in-out';
+        } else {
+            sidebar.style.transform = 'translateX(0px)';
+            sidebar.style.transition = 'transform 0.3s ease-in-out';
+        }
+    ">☰</button>
+    """, unsafe_allow_html=True)
+
+    # ==============================================================
 
     @st.cache_resource
     def get_db():
@@ -536,7 +563,7 @@ def main_app():
         st.session_state.messages = [{"role": msg["role"], "content": msg["content"]} for msg in messages]
         st.session_state.need_load = False
 
-    # ==================== 电脑端侧边栏 ====================
+    # ==================== 侧边栏 (电脑端) ====================
     with st.sidebar:
         st.markdown(f"👤 {st.session_state.username}")
         if st.button("🚪 退出登录", use_container_width=True):
@@ -583,14 +610,12 @@ def main_app():
                     st.rerun()
 
         st.divider()
-
         st.markdown("### 💰 今日用量")
         today = cost_monitor.get_today_usage()
         st.metric("调用", today["call_count"])
         st.metric("费用", f"¥{today['total_cost']:.4f}")
 
         st.divider()
-
         st.markdown("### ⚙️ 参数")
         temperature = st.slider("创造力", 0.0, 2.0, 0.7, 0.1)
         if mode == "🤖 单Agent模式":
@@ -637,7 +662,7 @@ def main_app():
             except Exception as e:
                 st.error(f"莉莉遇到问题：{e}")
 
-    # ==================== 移动端底栏 (电脑上也会显示，但不影响侧边栏) ====================
+    # ==================== 手机端底部快捷栏 ====================
     st.markdown("---")
     c1, c2, c3, c4 = st.columns([1, 2.5, 2.5, 1])
 
@@ -684,4 +709,3 @@ if not st.session_state.logged_in:
     show_login_page()
 else:
     main_app()
-
