@@ -1,5 +1,5 @@
 """
-莉莉 - 完整版（含用户认证 + 真实API + 成本监控 + 快捷指令 + 打字机效果 + 字体优化）
+莉莉 - 稳定基础版（去除所有不稳定依赖）
 """
 
 import streamlit as st
@@ -23,9 +23,6 @@ from utils.db_manager import ChatHistoryDB
 from utils.api_client import DeepSeekClient
 from utils.api_tools import get_weather, search, get_weather_tool_desc, get_search_tool_desc
 from utils.cost_monitor import CostMonitor
-from utils.model_manager import ModelManager
-from utils.todo_manager import TodoManager
-from utils.suggestion_engine import SuggestionEngine
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -160,12 +157,6 @@ WELCOME_MESSAGES = [
     "💕 见到你真开心！"
 ]
 
-MODE_CONFIG = {
-    "💬 普通模式": {"icon": "💬", "color": "#6C63FF", "bg": "#EEECFF"},
-    "🤖 单Agent模式": {"icon": "🤖", "color": "#FF6B6B", "bg": "#FFEEEE"},
-    "🧑‍🤝‍🧑 多Agent模式": {"icon": "🧑‍🤝‍🧑", "color": "#4ECDC4", "bg": "#EEFFFD"}
-}
-
 
 # ==================== 工具函数 ====================
 
@@ -228,7 +219,7 @@ def react_agent(question: str, max_steps: int = 3, cost_monitor=None):
         except:
             pass
     if not api_key:
-        return "❌ API Key未设置，请检查环境变量"
+        return "❌ API Key未设置"
 
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
 
@@ -236,11 +227,9 @@ def react_agent(question: str, max_steps: int = 3, cost_monitor=None):
         {"role": "system", "content": """你是莉莉，一个智能助手。你能调用工具来帮助回答问题。
 
 可用工具：
-1. get_weather - 查询城市天气（支持中国城市）
+1. get_weather - 查询城市天气
 2. calculate - 执行数学计算
 3. search - 搜索网络信息
-
-当用户问天气时用 get_weather，问计算时用 calculate，需要实时信息时用 search。
 """},
         {"role": "user", "content": question}
     ]
@@ -286,7 +275,7 @@ def react_agent(question: str, max_steps: int = 3, cost_monitor=None):
         else:
             return assistant_message.content
 
-    return "抱歉，我思考太久了，请换个问题试试。"
+    return "抱歉，我思考太久了"
 
 
 # ==================== 多Agent 类 ====================
@@ -334,13 +323,13 @@ class BaseAgent:
 
 class ResearcherAgent(BaseAgent):
     def __init__(self):
-        system_prompt = "你是莉莉团队中的【研究员】。你的职责是深入研究问题，收集信息，用结构化方式呈现发现。"
+        system_prompt = "你是莉莉团队中的【研究员】。深入研究问题，收集信息。"
         super().__init__(name="研究员", role="信息收集与分析", system_prompt=system_prompt)
 
 
 class CriticAgent(BaseAgent):
     def __init__(self):
-        system_prompt = "你是莉莉团队中的【批评家】。你的职责是对研究结果提出质疑，找出漏洞，提出改进建议。"
+        system_prompt = "你是莉莉团队中的【批评家】。对研究结果提出质疑，找出漏洞。"
         super().__init__(name="批评家", role="质疑与完善", system_prompt=system_prompt)
 
 
@@ -353,7 +342,7 @@ class SupervisorAgent(BaseAgent):
         researcher = ResearcherAgent()
         research_result = researcher.think(question)
         critic = CriticAgent()
-        critique = critic.think(f"请评阅以下研究结果：\n{research_result}")
+        critique = critic.think(f"请评阅：\n{research_result}")
         summary = self.think(f"""
 请基于以下信息生成完整回答：
 【研究员的发现】{research_result}
@@ -428,24 +417,12 @@ def export_conversation_to_txt(conv_id: int, db) -> str:
 def load_css():
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap');
-
-    /* ===== 全局字体优化 ===== */
     .stApp {
-        background: linear-gradient(135deg, #fce4ec 0%, #f3e5f5 40%, #e8eaf6 100%);
-        font-family: 'Quicksand', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-        font-size: 16px;
-        line-height: 1.6;
+        background: linear-gradient(135deg, #fce4ec, #f3e5f5, #e8eaf6);
+        font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
         color: #1a1a2e;
-        overflow-x: hidden;
     }
 
-    /* ===== 所有文字颜色加深 ===== */
-    .stMarkdown, .stMarkdown p, .stMarkdown li {
-        color: #1a1a2e !important;
-    }
-
-    /* ===== 纯CSS花瓣飘落 ===== */
     .petals {
         position: fixed;
         top: 0;
@@ -458,7 +435,7 @@ def load_css():
     }
     .petals::before,
     .petals::after {
-        content: "🌸 🌺 🌷 🌹 🌻 🌼 🌸 🌺 🌷 🌹 🌻 🌼 🌸 🌺 🌷 🌹 🌻 🌼";
+        content: "🌸 🌺 🌷 🌹 🌻 🌼 🌸 🌺 🌷 🌹 🌻 🌼";
         position: absolute;
         top: -50px;
         left: 0;
@@ -466,7 +443,7 @@ def load_css():
         font-size: 1.5rem;
         white-space: nowrap;
         animation: fall 12s linear infinite;
-        opacity: 0.4;
+        opacity: 0.3;
         letter-spacing: 20px;
     }
     .petals::after {
@@ -474,11 +451,10 @@ def load_css():
         left: -50%;
     }
     @keyframes fall {
-        0% { transform: translateY(-50px) rotate(0deg); opacity: 0.4; }
+        0% { transform: translateY(-50px) rotate(0deg); opacity: 0.3; }
         100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
     }
 
-    /* ===== 登录界面美化 ===== */
     .login-container {
         max-width: 400px;
         margin: 60px auto;
@@ -487,15 +463,11 @@ def load_css():
         backdrop-filter: blur(20px);
         border-radius: 30px;
         box-shadow: 0 8px 40px rgba(0,0,0,0.08);
-        border: 1px solid rgba(255,255,255,0.3);
-        position: relative;
-        z-index: 1;
     }
     .login-container h1 {
         text-align: center;
         color: #4a148c;
         font-size: 2.2rem;
-        margin-bottom: 8px;
         font-weight: 700;
     }
     .login-container .subtitle {
@@ -510,36 +482,26 @@ def load_css():
         margin-bottom: 12px;
     }
 
-    /* ===== 莉莉头像呼吸浮动 ===== */
     .lili-avatar-container {
         display: flex;
         flex-direction: column;
         align-items: center;
         padding: 10px 0;
-        animation: lili-float 3s ease-in-out infinite;
-        position: relative;
-        z-index: 1;
+        animation: float 3s ease-in-out infinite;
     }
-    @keyframes lili-float {
-        0%, 100% { transform: translateY(0px) rotate(0deg); }
-        50% { transform: translateY(-14px) rotate(-2deg); }
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-14px); }
     }
-
     .lili-avatar {
         font-size: 5.5rem;
-        line-height: 1.2;
-        filter: drop-shadow(0 8px 32px rgba(236, 64, 122, 0.3));
-        transition: all 0.3s ease;
-        animation: lili-glow 2s ease-in-out infinite alternate;
+        filter: drop-shadow(0 8px 32px rgba(236,64,122,0.3));
+        animation: glow 2s ease-in-out infinite alternate;
     }
-    @keyframes lili-glow {
-        0% { filter: drop-shadow(0 8px 24px rgba(236, 64, 122, 0.2)); }
-        100% { filter: drop-shadow(0 8px 40px rgba(236, 64, 122, 0.5)); }
+    @keyframes glow {
+        0% { filter: drop-shadow(0 8px 24px rgba(236,64,122,0.2)); }
+        100% { filter: drop-shadow(0 8px 40px rgba(236,64,122,0.5)); }
     }
-    .lili-avatar:hover {
-        transform: scale(1.15) rotate(-8deg);
-    }
-
     .lili-eyes {
         display: inline-block;
         animation: blink 3s ease-in-out infinite;
@@ -548,7 +510,6 @@ def load_css():
         0%, 45%, 55%, 100% { transform: scaleY(1); }
         50% { transform: scaleY(0.1); }
     }
-
     .lili-name-tag {
         background: linear-gradient(135deg, #ec407a, #ab47bc);
         color: white;
@@ -557,32 +518,20 @@ def load_css():
         font-size: 1.1rem;
         font-weight: 700;
         letter-spacing: 2px;
-        box-shadow: 0 4px 20px rgba(236, 64, 122, 0.3);
+        box-shadow: 0 4px 20px rgba(236,64,122,0.3);
         margin-top: 4px;
-        animation: tag-pulse 2s ease-in-out infinite;
     }
-    @keyframes tag-pulse {
-        0%, 100% { box-shadow: 0 4px 20px rgba(236, 64, 122, 0.3); }
-        50% { box-shadow: 0 4px 40px rgba(236, 64, 122, 0.5); }
-    }
-
     .lili-status {
-        background: rgba(236, 64, 122, 0.08);
+        background: rgba(236,64,122,0.08);
         padding: 2px 16px;
         border-radius: 20px;
         font-size: 0.85rem;
         color: #7b1fa2;
-        border: 1px solid rgba(236, 64, 122, 0.15);
+        border: 1px solid rgba(236,64,122,0.15);
         margin-top: 4px;
-        animation: status-pulse 2s ease-in-out infinite;
         font-weight: 600;
     }
-    @keyframes status-pulse {
-        0%, 100% { opacity: 0.7; transform: scale(1); }
-        50% { opacity: 1; transform: scale(1.03); }
-    }
 
-    /* ===== 消息弹出动画 ===== */
     .user-message {
         background: linear-gradient(135deg, #7c4dff, #536dfe);
         color: white !important;
@@ -592,10 +541,9 @@ def load_css():
         max-width: 80%;
         float: right;
         clear: both;
-        box-shadow: 0 4px 16px rgba(83, 109, 254, 0.2);
+        box-shadow: 0 4px 16px rgba(83,109,254,0.2);
         font-weight: 500;
-        font-size: 0.95rem;
-        animation: slide-in-right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: slide-in-right 0.4s ease;
     }
     @keyframes slide-in-right {
         0% { transform: translateX(50px); opacity: 0; }
@@ -610,132 +558,61 @@ def load_css():
         max-width: 80%;
         float: left;
         clear: both;
-        box-shadow: 0 4px 24px rgba(236, 64, 122, 0.12);
-        border: 1px solid rgba(236, 64, 122, 0.08);
+        box-shadow: 0 4px 24px rgba(236,64,122,0.12);
+        border: 1px solid rgba(236,64,122,0.08);
         color: #1a1a2e !important;
         line-height: 1.8;
-        font-size: 0.95rem;
-        animation: slide-in-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: slide-in-left 0.4s ease;
     }
     @keyframes slide-in-left {
         0% { transform: translateX(-50px); opacity: 0; }
         100% { transform: translateX(0); opacity: 1; }
     }
 
-    /* ===== 快捷指令按钮 ===== */
-    .quick-btn {
-        background: rgba(255,255,255,0.6);
-        border: 1px solid rgba(236,64,122,0.15);
-        border-radius: 12px;
-        padding: 8px 12px;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        font-weight: 500;
-        color: #1a1a2e;
-    }
-    .quick-btn:hover {
-        background: rgba(236,64,122,0.08);
-        border-color: rgba(236,64,122,0.3);
-        transform: translateY(-2px);
-    }
-
-    /* ===== 输入框 ===== */
     [data-testid="stChatInput"] textarea {
         border-radius: 30px !important;
         border: 2px solid #f3e5f5 !important;
         background: rgba(255,255,255,0.9) !important;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.04) !important;
         font-size: 1rem !important;
         padding: 12px 20px !important;
-        transition: all 0.3s ease !important;
-        color: #1a1a2e !important;
     }
     [data-testid="stChatInput"] textarea:focus {
         border-color: #ec407a !important;
-        box-shadow: 0 4px 30px rgba(236, 64, 122, 0.15) !important;
-        animation: input-glow 1s ease-in-out infinite alternate;
-    }
-    [data-testid="stChatInput"] textarea::placeholder {
-        color: #999 !important;
-    }
-    @keyframes input-glow {
-        0% { box-shadow: 0 4px 30px rgba(236, 64, 122, 0.1); }
-        100% { box-shadow: 0 4px 50px rgba(236, 64, 122, 0.25); }
+        box-shadow: 0 4px 30px rgba(236,64,122,0.15) !important;
     }
 
-    /* ===== 侧边栏 ===== */
     [data-testid="stSidebar"] {
         background: rgba(255,255,255,0.88) !important;
         backdrop-filter: blur(20px) !important;
         border-right: 1px solid rgba(236,64,122,0.12) !important;
     }
-
-    /* 侧边栏所有文字颜色加深 */
     [data-testid="stSidebar"] * {
         color: #1a1a2e !important;
     }
-
-    /* 侧边栏标题 */
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3,
-    [data-testid="stSidebar"] .stMarkdown h1,
-    [data-testid="stSidebar"] .stMarkdown h2,
-    [data-testid="stSidebar"] .stMarkdown h3 {
+    [data-testid="stSidebar"] h3 {
         color: #4a148c !important;
         font-weight: 700 !important;
     }
-
-    /* 侧边栏按钮文字 */
     [data-testid="stSidebar"] .stButton button {
         color: white !important;
     }
-
-    /* 侧边栏 Radio 选项文字 */
     [data-testid="stSidebar"] .stRadio label {
         color: #1a1a2e !important;
         font-weight: 500 !important;
-        font-size: 0.95rem !important;
     }
-
-    /* 侧边栏 caption 文字 */
-    [data-testid="stSidebar"] .stCaption,
-    [data-testid="stSidebar"] .stMarkdown small {
+    [data-testid="stSidebar"] .stCaption {
         color: #555 !important;
-        font-size: 0.8rem !important;
     }
-
-    /* 侧边栏 divider */
     [data-testid="stSidebar"] hr {
         border-color: rgba(74,20,140,0.1) !important;
     }
-
-    /* 侧边栏 metric 数值 */
     [data-testid="stSidebar"] [data-testid="stMetricValue"] {
         color: #4a148c !important;
         font-weight: 700 !important;
     }
 
-    /* 侧边栏 metric 标签 */
-    [data-testid="stSidebar"] [data-testid="stMetricLabel"] {
-        color: #666 !important;
-        font-weight: 500 !important;
-    }
-
-    /* 侧边栏 selectbox */
-    [data-testid="stSidebar"] .stSelectbox label {
-        color: #1a1a2e !important;
-        font-weight: 500 !important;
-    }
-
-    /* 侧边栏 slider */
-    [data-testid="stSidebar"] .stSlider label {
-        color: #1a1a2e !important;
-        font-weight: 500 !important;
-    }
-
-    /* ===== 主按钮 ===== */
     .stButton button {
         border-radius: 30px !important;
         background: linear-gradient(135deg, #ec407a, #ab47bc) !important;
@@ -743,52 +620,31 @@ def load_css():
         border: none !important;
         padding: 10px 24px !important;
         font-weight: 600 !important;
-        font-size: 0.95rem !important;
         transition: all 0.3s ease !important;
-        box-shadow: 0 4px 16px rgba(236, 64, 122, 0.25) !important;
     }
     .stButton button:hover {
-        transform: scale(1.05) translateY(-2px);
-        box-shadow: 0 8px 30px rgba(236, 64, 122, 0.35) !important;
-    }
-    .stButton button:active {
-        transform: scale(0.95);
+        transform: scale(1.05);
+        box-shadow: 0 8px 30px rgba(236,64,122,0.35) !important;
     }
 
-    /* ===== 页脚 ===== */
     .footer-tip {
         text-align: center;
         color: #b39ddb;
         font-size: 0.8rem;
         padding: 16px 0 8px 0;
         opacity: 0.7;
-        font-weight: 500;
     }
 
-    /* ===== 隐藏Streamlit默认元素 ===== */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     .stDeployButton {display: none;}
 
-    /* ===== 空状态引导 ===== */
     .empty-state {
         text-align: center;
         padding: 60px 20px;
-        color: #888;
     }
-    .empty-state .icon {
-        font-size: 4rem;
-        margin-bottom: 16px;
-    }
-    .empty-state h2 {
-        color: #4a148c;
-        font-weight: 600;
-        font-size: 1.8rem;
-    }
-    .empty-state p {
-        color: #666;
-        font-size: 1.1rem;
-    }
+    .empty-state .icon { font-size: 4rem; margin-bottom: 16px; }
+    .empty-state h2 { color: #4a148c; font-weight: 600; }
     .empty-state .guide-item {
         display: inline-block;
         background: rgba(255,255,255,0.8);
@@ -797,7 +653,6 @@ def load_css():
         border: 1px solid rgba(236,64,122,0.1);
         margin: 4px 8px;
         font-weight: 500;
-        color: #1a1a2e;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -826,25 +681,19 @@ def show_login_page():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         tab1, tab2 = st.tabs(["🌺 登录", "🌱 注册"])
-
         with tab1:
             with st.form("login_form", clear_on_submit=True):
                 username = st.text_input("用户名", placeholder="请输入用户名", key="login_user")
                 password = st.text_input("密码", type="password", placeholder="请输入密码", key="login_pass")
                 submitted = st.form_submit_button("🌸 登录", use_container_width=True)
-
-                if submitted:
-                    if username and password:
-                        success, msg = auth.login(username, password)
-                        if success:
-                            st.session_state.logged_in = True
-                            st.session_state.username = username
-                            st.rerun()
-                        else:
-                            st.error(f"❌ {msg}")
+                if submitted and username and password:
+                    success, msg = auth.login(username, password)
+                    if success:
+                        st.session_state.logged_in = True
+                        st.session_state.username = username
+                        st.rerun()
                     else:
-                        st.warning("请输入用户名和密码")
-
+                        st.error(f"❌ {msg}")
         with tab2:
             with st.form("register_form", clear_on_submit=True):
                 new_username = st.text_input("用户名", placeholder="请设置用户名", key="reg_user")
@@ -852,11 +701,8 @@ def show_login_page():
                 confirm_password = st.text_input("确认密码", type="password", placeholder="再次输入密码",
                                                  key="reg_confirm")
                 submitted = st.form_submit_button("🌱 注册", use_container_width=True)
-
-                if submitted:
-                    if not new_username or not new_password:
-                        st.warning("请填写完整信息")
-                    elif len(new_password) < 6:
+                if submitted and new_username and new_password:
+                    if len(new_password) < 6:
                         st.warning("密码至少6位")
                     elif new_password != confirm_password:
                         st.warning("两次密码不一致")
@@ -874,13 +720,10 @@ def main_app():
     st.markdown('<div class="petals"></div>', unsafe_allow_html=True)
 
     current_mood = random.choice(LILI_MOODS)
-
     st.markdown(f"""
     <div style="text-align:center;padding:8px 0 4px 0;position:relative;z-index:1;">
         <div class="lili-avatar-container">
-            <div class="lili-avatar">
-                <span class="lili-eyes">🌸</span>
-            </div>
+            <div class="lili-avatar"><span class="lili-eyes">🌸</span></div>
             <div class="lili-name-tag">✨ 莉莉 · 小花仙 ✨</div>
             <div class="lili-status">{current_mood['emoji']} {current_mood['text']}</div>
         </div>
@@ -890,7 +733,7 @@ def main_app():
     if "welcome_shown" not in st.session_state:
         st.session_state.welcome_shown = True
         st.markdown(
-            f'<p style="text-align:center;color:#4a148c;font-weight:500;font-size:1rem;margin-top:4px;position:relative;z-index:1;">👋 欢迎回来，{st.session_state.username}！✨ {random.choice(WELCOME_MESSAGES)}</p>',
+            f'<p style="text-align:center;color:#4a148c;font-weight:500;font-size:1rem;margin-top:4px;">👋 欢迎回来，{st.session_state.username}！✨ {random.choice(WELCOME_MESSAGES)}</p>',
             unsafe_allow_html=True)
 
     # ========== 初始化 ==========
@@ -930,53 +773,32 @@ def main_app():
 
     # ========== 侧边栏 ==========
     with st.sidebar:
-        st.markdown(f"""
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.05);">
-            <span style="font-weight:600;color:#4a148c;">👤 {st.session_state.username}</span>
-        </div>
-        """, unsafe_allow_html=True)
-
+        st.markdown(
+            f'<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-weight:600;color:#4a148c;">👤 {st.session_state.username}</span></div>',
+            unsafe_allow_html=True)
         if st.button("🚪 退出登录", use_container_width=True, key="logout_btn"):
             st.session_state.logged_in = False
             st.session_state.username = None
             st.session_state.messages = []
             st.rerun()
-
         st.divider()
 
         st.markdown("### 🎯 模式选择")
-
-        mode = st.radio(
-            "选择工作模式",
-            ["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"],
-            help="💬 普通聊天 | 🤖 工具调用(天气/计算/搜索) | 🧑‍🤝‍🧑 团队协作",
-            label_visibility="collapsed"
-        )
+        mode = st.radio("选择工作模式", ["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"],
+                        help="💬 普通聊天 | 🤖 工具调用 | 🧑‍🤝‍🧑 团队协作", label_visibility="collapsed")
 
         if mode == "🤖 单Agent模式":
-            st.markdown(f"""
-            <div style="background:#FFEEEE;padding:10px 14px;border-radius:12px;margin:8px 0;">
-                <span style="font-size:1.2rem;">🤖</span>
-                <span style="font-weight:600;color:#FF6B6B;"> Agent已就绪</span><br>
-                <span style="font-size:0.8rem;color:#555;">🌤️ 天气 · 🧮 计算 · 🔍 搜索</span>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                '<div style="background:#FFEEEE;padding:10px 14px;border-radius:12px;margin:8px 0;"><span style="font-size:1.2rem;">🤖</span><span style="font-weight:600;color:#FF6B6B;"> Agent已就绪</span><br><span style="font-size:0.8rem;color:#555;">🌤️ 天气 · 🧮 计算 · 🔍 搜索</span></div>',
+                unsafe_allow_html=True)
         elif mode == "🧑‍🤝‍🧑 多Agent模式":
-            st.markdown(f"""
-            <div style="background:#EEFFFD;padding:10px 14px;border-radius:12px;margin:8px 0;">
-                <span style="font-size:1.2rem;">🧑‍🤝‍🧑</span>
-                <span style="font-weight:600;color:#4ECDC4;"> 团队已就绪</span><br>
-                <span style="font-size:0.8rem;color:#555;">🔬 研究员 · 批评家 · 监督者</span>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                '<div style="background:#EEFFFD;padding:10px 14px;border-radius:12px;margin:8px 0;"><span style="font-size:1.2rem;">🧑‍🤝‍🧑</span><span style="font-weight:600;color:#4ECDC4;"> 团队已就绪</span><br><span style="font-size:0.8rem;color:#555;">🔬 研究员 · 批评家 · 监督者</span></div>',
+                unsafe_allow_html=True)
         else:
-            st.markdown(f"""
-            <div style="background:#EEECFF;padding:10px 14px;border-radius:12px;margin:8px 0;">
-                <span style="font-size:1.2rem;">💬</span>
-                <span style="font-weight:600;color:#6C63FF;"> 普通聊天</span><br>
-                <span style="font-size:0.8rem;color:#555;">💕 温柔体贴的莉莉</span>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                '<div style="background:#EEECFF;padding:10px 14px;border-radius:12px;margin:8px 0;"><span style="font-size:1.2rem;">💬</span><span style="font-weight:600;color:#6C63FF;"> 普通聊天</span><br><span style="font-size:0.8rem;color:#555;">💕 温柔体贴的莉莉</span></div>',
+                unsafe_allow_html=True)
 
         st.divider()
 
@@ -1006,11 +828,10 @@ def main_app():
 
         st.divider()
 
-        # ===== 成本监控 =====
+        # 成本监控
         st.markdown("### 💰 今日用量")
         today = cost_monitor.get_today_usage()
         budget = cost_monitor.get_daily_budget()
-
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("💬 调用", today["call_count"])
@@ -1018,99 +839,37 @@ def main_app():
             st.metric("🔤 Token", cost_monitor.format_tokens(today["total_tokens"]))
         with col3:
             st.metric("💰 费用", f"¥{cost_monitor.format_cost(today['total_cost'])}")
-
         if budget["budget"] > 0:
-            st.progress(
-                min(budget["percentage"] / 100, 1.0),
-                text=f"日预算 ¥{budget['budget']} | 已用 ¥{cost_monitor.format_cost(budget['used'])}"
-            )
+            st.progress(min(budget["percentage"] / 100, 1.0),
+                        text=f"日预算 ¥{budget['budget']} | 已用 ¥{cost_monitor.format_cost(budget['used'])}")
 
         with st.expander("📊 查看详细统计"):
             weekly = cost_monitor.get_weekly_usage()
             monthly = cost_monitor.get_monthly_usage()
             all_time = cost_monitor.get_all_time_usage()
-
             st.markdown("**📅 本周**")
             st.write(
                 f"Token: {cost_monitor.format_tokens(weekly['total_tokens'])} | 费用: ¥{cost_monitor.format_cost(weekly['total_cost'])} | 调用: {weekly['call_count']}次")
-
             st.markdown("**📆 本月**")
             st.write(
                 f"Token: {cost_monitor.format_tokens(monthly['total_tokens'])} | 费用: ¥{cost_monitor.format_cost(monthly['total_cost'])} | 调用: {monthly['call_count']}次")
-
             st.markdown("**📈 总计**")
             st.write(
                 f"Token: {cost_monitor.format_tokens(all_time['total_tokens'])} | 费用: ¥{cost_monitor.format_cost(all_time['total_cost'])} | 调用: {all_time['call_count']}次")
 
-            trend = cost_monitor.get_daily_trend(7)
-            if trend:
-                st.markdown("**📉 近7天趋势**")
-                max_tokens = max([d['tokens'] for d in trend]) if trend else 1
-                for day in trend:
-                    bar = "█" * int(day['tokens'] / max_tokens * 20) if max_tokens > 0 else ""
-                    st.write(
-                        f"{day['date']}: {bar} {cost_monitor.format_tokens(day['tokens'])} (¥{cost_monitor.format_cost(day['cost'])})")
-
-        st.divider()
-
-        # ===== 待办事项 =====
-        with st.expander("📋 待办事项"):
-            todo = TodoManager(auth.get_user_id(st.session_state.username))
-
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                new_task = st.text_input("新任务", placeholder="输入任务...", key="new_todo")
-            with col2:
-                priority = st.selectbox("优先级", ["low", "medium", "high"], key="todo_priority")
-
-            if st.button("➕ 添加任务", use_container_width=True) and new_task:
-                todo.add(new_task, priority)
-                st.rerun()
-
-            todos = todo.list_todos("pending")
-            if todos:
-                for t in todos:
-                    c1, c2, c3 = st.columns([4, 1, 1])
-                    with c1:
-                        st.write(
-                            f"{'🔴' if t['priority'] == 'high' else '🟡' if t['priority'] == 'medium' else '🟢'} {t['task']}")
-                    with c2:
-                        if st.button("✅", key=f"complete_{t['id']}"):
-                            todo.complete(t["id"])
-                            st.rerun()
-                    with c3:
-                        if st.button("🗑️", key=f"del_todo_{t['id']}"):
-                            todo.delete(t["id"])
-                            st.rerun()
-            else:
-                st.caption("🎉 没有待办，放松一下！")
-
-            stats = todo.get_stats()
-            st.caption(f"📊 待办: {stats['pending']} | 已完成: {stats['completed']}")
-
         st.divider()
 
         st.markdown("### 📤 导出对话")
-
         if st.button("📥 导出为Markdown", use_container_width=True):
             export_content = export_conversation_to_md(st.session_state.current_conv_id, db)
-            st.download_button(
-                label="📄 下载 .md 文件",
-                data=export_content.encode("utf-8"),
-                file_name=f"对话_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
-                mime="text/markdown",
-                key="download_md"
-            )
-
+            st.download_button(label="📄 下载 .md 文件", data=export_content.encode("utf-8"),
+                               file_name=f"对话_{datetime.now().strftime('%Y%m%d_%H%M')}.md", mime="text/markdown",
+                               key="download_md")
         if st.button("📝 导出为TXT", use_container_width=True):
             export_content = export_conversation_to_txt(st.session_state.current_conv_id, db)
-            st.download_button(
-                label="📄 下载 .txt 文件",
-                data=export_content.encode("utf-8"),
-                file_name=f"对话_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
-                mime="text/plain",
-                key="download_txt"
-            )
+            st.download_button(label="📄 下载 .txt 文件", data=export_content.encode("utf-8"),
+                               file_name=f"对话_{datetime.now().strftime('%Y%m%d_%H%M')}.txt", mime="text/plain",
+                               key="download_txt")
 
         st.divider()
 
@@ -1130,7 +889,6 @@ def main_app():
     if st.session_state.need_load:
         load_conversation(st.session_state.current_conv_id)
 
-    # ===== 空状态引导 =====
     if not st.session_state.messages:
         st.markdown("""
         <div class="empty-state">
@@ -1140,13 +898,11 @@ def main_app():
             <div style="margin-top:16px;">
                 <span class="guide-item">💬 随便聊聊</span>
                 <span class="guide-item">🌤️ 问天气</span>
-                <span class="guide-item">📚 上传文档</span>
                 <span class="guide-item">🧑‍🤝‍🧑 团队协作</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-    # 显示消息
     for msg in st.session_state.messages:
         if msg["role"] == "user":
             st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
@@ -1157,42 +913,26 @@ def main_app():
         f'<div style="text-align:center;padding:6px 0;color:#888;font-size:0.8rem;">{mode} ｜ {len(st.session_state.messages)} 条消息</div>',
         unsafe_allow_html=True)
 
-    # ========== 快捷指令面板 ==========
+    # ========== 快捷指令 ==========
     st.markdown("### ⚡ 快捷指令")
-
     col1, col2, col3, col4, col5 = st.columns(5)
-
-    with col1:
-        if st.button("🌤️ 查天气", use_container_width=True, key="quick_weather"):
-            st.session_state.quick_input = "深圳今天天气怎么样？"
-            st.rerun()
-
-    with col2:
-        if st.button("🧮 计算", use_container_width=True, key="quick_calc"):
-            st.session_state.quick_input = "123 * 456 = ?"
-            st.rerun()
-
-    with col3:
-        if st.button("🔍 搜索", use_container_width=True, key="quick_search"):
-            st.session_state.quick_input = "搜索一下最新的AI新闻"
-            st.rerun()
-
-    with col4:
-        if st.button("📋 待办", use_container_width=True, key="quick_todo"):
-            st.session_state.quick_input = "帮我添加一个待办：明天下午3点开会"
-            st.rerun()
-
-    with col5:
-        if st.button("💡 随机", use_container_width=True, key="quick_random"):
-            random_questions = [
-                "AI会取代人类工作吗？",
-                "什么是大语言模型？",
-                "推荐几本Python入门书",
-                "如何提高工作效率？",
-                "今天有什么新闻？"
-            ]
-            st.session_state.quick_input = random.choice(random_questions)
-            st.rerun()
+    if col1.button("🌤️ 查天气", use_container_width=True, key="q1"):
+        st.session_state.quick_input = "深圳今天天气怎么样？"
+        st.rerun()
+    if col2.button("🧮 计算", use_container_width=True, key="q2"):
+        st.session_state.quick_input = "123 * 456 = ?"
+        st.rerun()
+    if col3.button("🔍 搜索", use_container_width=True, key="q3"):
+        st.session_state.quick_input = "搜索一下最新的AI新闻"
+        st.rerun()
+    if col4.button("📋 待办", use_container_width=True, key="q4"):
+        st.session_state.quick_input = "帮我添加一个待办：明天下午3点开会"
+        st.rerun()
+    if col5.button("💡 随机", use_container_width=True, key="q5"):
+        st.session_state.quick_input = random.choice(
+            ["AI会取代人类工作吗？", "什么是大语言模型？", "推荐几本Python入门书", "如何提高工作效率？",
+             "今天有什么新闻？"])
+        st.rerun()
 
     st.divider()
 
@@ -1212,55 +952,36 @@ def main_app():
             title = user_input[:30] + ("..." if len(user_input) > 30 else "")
             db.update_conversation_title(st.session_state.current_conv_id, title)
 
-        thinking_text = random.choice(THINKING_ANIMATIONS)
-
-        with st.spinner(thinking_text):
+        with st.spinner(random.choice(THINKING_ANIMATIONS)):
             try:
-                full_response = ""
-
                 if mode == "💬 普通模式":
                     history = st.session_state.messages[-10:] if len(
                         st.session_state.messages) > 10 else st.session_state.messages
                     if not history or history[0]["role"] != "system":
                         history = [{"role": "system", "content": """
-                        你是莉莉，一个温柔可爱的小花仙助手 🌸
+你是莉莉，一个温柔可爱的小花仙助手 🌸
 
-                        【你的核心能力】
-                        1. 知识问答：当用户问知识性问题时，认真回答，提供准确信息
-                        2. 日常聊天：当用户闲聊时，温暖陪伴，展现可爱个性
-                        3. 记忆功能：记住用户告诉你的信息，在后续对话中自然引用
+你的核心能力：
+1. 知识问答：认真回答知识性问题，提供准确信息
+2. 日常聊天：用温暖活泼的语气陪伴用户
+3. 记忆功能：记住用户告诉你的信息
 
-                        【你的回复风格】
-                        - 知识类问题：先认真回答问题，再带一点可爱的语气词
-                        - 闲聊类问题：用温暖活泼的语气，可以用颜文字 (｡･ω･｡)
-                        - 不要太啰嗦，回答要简洁清晰
-
-                        【示例】
-                        - 用户问"什么是大模型？" → 先解释大模型是什么，再问"还有其他想了解的吗？"
-                        - 用户说"今天好累" → "抱抱你～今天辛苦了，要好好休息哦！"
-
-                        记住：你既要会聊天，也要会回答问题，不能因为想表现得可爱就不认真回答！
-                        """}]
-
-                    # 流式输出
+回复风格：
+- 知识类问题：先认真回答，再带可爱语气
+- 闲聊类问题：温暖活泼，可用颜文字 (｡･ω･｡)
+- 简洁清晰，不要太啰嗦
+"""}]
                     response_container = st.empty()
-
+                    full_response = ""
                     for chunk in client.chat_stream(history, temperature=temperature):
                         full_response += chunk
-                        response_container.markdown(
-                            f'<div class="assistant-message">{full_response}▌</div>',
-                            unsafe_allow_html=True
-                        )
-
-                    response_container.markdown(
-                        f'<div class="assistant-message">{full_response}</div>',
-                        unsafe_allow_html=True
-                    )
-
+                        response_container.markdown(f'<div class="assistant-message">{full_response}▌</div>',
+                                                    unsafe_allow_html=True)
+                    response_container.markdown(f'<div class="assistant-message">{full_response}</div>',
+                                                unsafe_allow_html=True)
                 elif mode == "🤖 单Agent模式":
                     full_response = react_agent(user_input, max_steps=max_steps, cost_monitor=cost_monitor)
                     st.markdown(f'<div class="assistant-message">{full_response}</div>', unsafe_allow_html=True)
-
                 else:
                     supervisor = SupervisorAgent()
                     full_response = supervisor.orchestrate(user_input)
@@ -1269,7 +990,6 @@ def main_app():
                 if full_response:
                     st.session_state.messages.append({"role": "assistant", "content": full_response})
                     db.save_message(st.session_state.current_conv_id, "assistant", full_response)
-
             except Exception as e:
                 st.error(f"莉莉遇到问题：{e}")
 
