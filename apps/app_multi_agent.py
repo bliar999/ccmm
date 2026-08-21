@@ -773,35 +773,59 @@ def main_app():
 
     # ========== 侧边栏 ==========
     with st.sidebar:
-        st.markdown(
-            f'<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-weight:600;color:#4a148c;">👤 {st.session_state.username}</span></div>',
-            unsafe_allow_html=True)
+        # 用户信息
+        st.markdown(f"""
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.05);">
+            <span style="font-weight:600;color:#4a148c;">👤 {st.session_state.username}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
         if st.button("🚪 退出登录", use_container_width=True, key="logout_btn"):
             st.session_state.logged_in = False
             st.session_state.username = None
             st.session_state.messages = []
             st.rerun()
+
         st.divider()
 
+        # ===== 模式选择 =====
         st.markdown("### 🎯 模式选择")
-        mode = st.radio("选择工作模式", ["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"],
-                        help="💬 普通聊天 | 🤖 工具调用 | 🧑‍🤝‍🧑 团队协作", label_visibility="collapsed")
+
+        mode = st.radio(
+            "选择工作模式",
+            ["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"],
+            help="💬 普通聊天 | 🤖 工具调用(天气/计算/搜索) | 🧑‍🤝‍🧑 团队协作",
+            label_visibility="collapsed"
+        )
 
         if mode == "🤖 单Agent模式":
-            st.markdown(
-                '<div style="background:#FFEEEE;padding:10px 14px;border-radius:12px;margin:8px 0;"><span style="font-size:1.2rem;">🤖</span><span style="font-weight:600;color:#FF6B6B;"> Agent已就绪</span><br><span style="font-size:0.8rem;color:#555;">🌤️ 天气 · 🧮 计算 · 🔍 搜索</span></div>',
-                unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="background:#FFEEEE;padding:10px 14px;border-radius:12px;margin:8px 0;">
+                <span style="font-size:1.2rem;">🤖</span>
+                <span style="font-weight:600;color:#FF6B6B;"> Agent已就绪</span><br>
+                <span style="font-size:0.8rem;color:#555;">🌤️ 天气 · 🧮 计算 · 🔍 搜索</span>
+            </div>
+            """, unsafe_allow_html=True)
         elif mode == "🧑‍🤝‍🧑 多Agent模式":
-            st.markdown(
-                '<div style="background:#EEFFFD;padding:10px 14px;border-radius:12px;margin:8px 0;"><span style="font-size:1.2rem;">🧑‍🤝‍🧑</span><span style="font-weight:600;color:#4ECDC4;"> 团队已就绪</span><br><span style="font-size:0.8rem;color:#555;">🔬 研究员 · 批评家 · 监督者</span></div>',
-                unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="background:#EEFFFD;padding:10px 14px;border-radius:12px;margin:8px 0;">
+                <span style="font-size:1.2rem;">🧑‍🤝‍🧑</span>
+                <span style="font-weight:600;color:#4ECDC4;"> 团队已就绪</span><br>
+                <span style="font-size:0.8rem;color:#555;">🔬 研究员 · 批评家 · 监督者</span>
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            st.markdown(
-                '<div style="background:#EEECFF;padding:10px 14px;border-radius:12px;margin:8px 0;"><span style="font-size:1.2rem;">💬</span><span style="font-weight:600;color:#6C63FF;"> 普通聊天</span><br><span style="font-size:0.8rem;color:#555;">💕 温柔体贴的莉莉</span></div>',
-                unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="background:#EEECFF;padding:10px 14px;border-radius:12px;margin:8px 0;">
+                <span style="font-size:1.2rem;">💬</span>
+                <span style="font-weight:600;color:#6C63FF;"> 普通聊天</span><br>
+                <span style="font-size:0.8rem;color:#555;">💕 温柔体贴的莉莉</span>
+            </div>
+            """, unsafe_allow_html=True)
 
         st.divider()
 
+        # ===== 对话历史 =====
         st.markdown("### 📜 对话历史")
         if st.button("➕ 新建对话", use_container_width=True):
             new_id = db.create_conversation("莉莉的新对话")
@@ -828,10 +852,11 @@ def main_app():
 
         st.divider()
 
-        # 成本监控
+        # ===== 成本监控 =====
         st.markdown("### 💰 今日用量")
         today = cost_monitor.get_today_usage()
         budget = cost_monitor.get_daily_budget()
+
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("💬 调用", today["call_count"])
@@ -839,40 +864,108 @@ def main_app():
             st.metric("🔤 Token", cost_monitor.format_tokens(today["total_tokens"]))
         with col3:
             st.metric("💰 费用", f"¥{cost_monitor.format_cost(today['total_cost'])}")
+
         if budget["budget"] > 0:
-            st.progress(min(budget["percentage"] / 100, 1.0),
-                        text=f"日预算 ¥{budget['budget']} | 已用 ¥{cost_monitor.format_cost(budget['used'])}")
+            st.progress(
+                min(budget["percentage"] / 100, 1.0),
+                text=f"日预算 ¥{budget['budget']} | 已用 ¥{cost_monitor.format_cost(budget['used'])}"
+            )
 
         with st.expander("📊 查看详细统计"):
             weekly = cost_monitor.get_weekly_usage()
             monthly = cost_monitor.get_monthly_usage()
             all_time = cost_monitor.get_all_time_usage()
+
             st.markdown("**📅 本周**")
             st.write(
                 f"Token: {cost_monitor.format_tokens(weekly['total_tokens'])} | 费用: ¥{cost_monitor.format_cost(weekly['total_cost'])} | 调用: {weekly['call_count']}次")
+
             st.markdown("**📆 本月**")
             st.write(
                 f"Token: {cost_monitor.format_tokens(monthly['total_tokens'])} | 费用: ¥{cost_monitor.format_cost(monthly['total_cost'])} | 调用: {monthly['call_count']}次")
+
             st.markdown("**📈 总计**")
             st.write(
                 f"Token: {cost_monitor.format_tokens(all_time['total_tokens'])} | 费用: ¥{cost_monitor.format_cost(all_time['total_cost'])} | 调用: {all_time['call_count']}次")
 
+            trend = cost_monitor.get_daily_trend(7)
+            if trend:
+                st.markdown("**📉 近7天趋势**")
+                max_tokens = max([d['tokens'] for d in trend]) if trend else 1
+                for day in trend:
+                    bar = "█" * int(day['tokens'] / max_tokens * 20) if max_tokens > 0 else ""
+                    st.write(
+                        f"{day['date']}: {bar} {cost_monitor.format_tokens(day['tokens'])} (¥{cost_monitor.format_cost(day['cost'])})")
+
         st.divider()
 
+        # ===== 待办事项 =====
+        with st.expander("📋 待办事项"):
+            try:
+                from utils.todo_manager import TodoManager
+                todo = TodoManager(auth.get_user_id(st.session_state.username))
+
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    new_task = st.text_input("新任务", placeholder="输入任务...", key="new_todo")
+                with col2:
+                    priority = st.selectbox("优先级", ["low", "medium", "high"], key="todo_priority")
+
+                if st.button("➕ 添加任务", use_container_width=True) and new_task:
+                    todo.add(new_task, priority)
+                    st.rerun()
+
+                todos = todo.list_todos("pending")
+                if todos:
+                    for t in todos:
+                        c1, c2, c3 = st.columns([4, 1, 1])
+                        with c1:
+                            st.write(
+                                f"{'🔴' if t['priority'] == 'high' else '🟡' if t['priority'] == 'medium' else '🟢'} {t['task']}")
+                        with c2:
+                            if st.button("✅", key=f"complete_{t['id']}"):
+                                todo.complete(t["id"])
+                                st.rerun()
+                        with c3:
+                            if st.button("🗑️", key=f"del_todo_{t['id']}"):
+                                todo.delete(t["id"])
+                                st.rerun()
+                else:
+                    st.caption("🎉 没有待办，放松一下！")
+
+                stats = todo.get_stats()
+                st.caption(f"📊 待办: {stats['pending']} | 已完成: {stats['completed']}")
+            except:
+                st.caption("📋 待办功能暂时不可用")
+
+        st.divider()
+
+        # ===== 导出对话 =====
         st.markdown("### 📤 导出对话")
+
         if st.button("📥 导出为Markdown", use_container_width=True):
             export_content = export_conversation_to_md(st.session_state.current_conv_id, db)
-            st.download_button(label="📄 下载 .md 文件", data=export_content.encode("utf-8"),
-                               file_name=f"对话_{datetime.now().strftime('%Y%m%d_%H%M')}.md", mime="text/markdown",
-                               key="download_md")
+            st.download_button(
+                label="📄 下载 .md 文件",
+                data=export_content.encode("utf-8"),
+                file_name=f"对话_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
+                mime="text/markdown",
+                key="download_md"
+            )
+
         if st.button("📝 导出为TXT", use_container_width=True):
             export_content = export_conversation_to_txt(st.session_state.current_conv_id, db)
-            st.download_button(label="📄 下载 .txt 文件", data=export_content.encode("utf-8"),
-                               file_name=f"对话_{datetime.now().strftime('%Y%m%d_%H%M')}.txt", mime="text/plain",
-                               key="download_txt")
+            st.download_button(
+                label="📄 下载 .txt 文件",
+                data=export_content.encode("utf-8"),
+                file_name=f"对话_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                mime="text/plain",
+                key="download_txt"
+            )
 
         st.divider()
 
+        # ===== 参数设置 =====
         st.markdown("### ⚙️ 参数")
         temperature = st.slider("🎨 创造力", 0.0, 2.0, 0.7, 0.1)
         if mode == "🤖 单Agent模式":
