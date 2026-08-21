@@ -1,5 +1,5 @@
 """
-多模型管理器 - 简化版（仅 DeepSeek，兼容扩展）
+多模型管理器 - 简化版（仅 DeepSeek）
 """
 
 import os
@@ -9,7 +9,7 @@ from typing import List, Dict, Optional
 
 
 class ModelManager:
-    """模型管理器 - 当前仅 DeepSeek，预留扩展接口"""
+    """模型管理器 - 当前仅 DeepSeek"""
 
     MODELS = {
         "deepseek-chat": {
@@ -25,7 +25,6 @@ class ModelManager:
 
     @classmethod
     def get_available_models(cls) -> List[str]:
-        """获取已配置 API Key 的可用模型"""
         available = []
         for model_id, config in cls.MODELS.items():
             key_name = config["env_key"]
@@ -41,12 +40,10 @@ class ModelManager:
 
     @classmethod
     def get_model_info(cls, model_id: str) -> Optional[Dict]:
-        """获取模型详细信息"""
         return cls.MODELS.get(model_id)
 
     @classmethod
     def get_client(cls, model_id: str) -> Optional[OpenAI]:
-        """获取 API 客户端"""
         config = cls.MODELS.get(model_id)
         if not config:
             return None
@@ -66,7 +63,6 @@ class ModelManager:
 
     @classmethod
     def chat(cls, model_id: str, messages: List[Dict], temperature: float = 0.7) -> Dict:
-        """统一对话接口"""
         config = cls.MODELS.get(model_id)
         if not config:
             return {"success": False, "error": f"未知模型: {model_id}"}
@@ -75,7 +71,7 @@ class ModelManager:
         if not client:
             return {
                 "success": False,
-                "error": f"❌ {config['name']} 未配置 API Key，请在 .env 中设置 {config['env_key']}"
+                "error": f"❌ {config['name']} 未配置 API Key"
             }
 
         try:
