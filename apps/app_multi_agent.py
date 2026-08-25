@@ -1,5 +1,5 @@
 """
-莉莉 - 稳定基础版（去除所有不稳定依赖）
+莉莉 - 完整稳定版（修复答非所问 + 恢复侧边栏）
 """
 
 import streamlit as st
@@ -323,13 +323,13 @@ class BaseAgent:
 
 class ResearcherAgent(BaseAgent):
     def __init__(self):
-        system_prompt = "你是莉莉团队中的【研究员】。深入研究问题，收集信息。"
+        system_prompt = "你是莉莉团队中的【研究员】。深入研究问题，收集信息，用结构化方式呈现发现。"
         super().__init__(name="研究员", role="信息收集与分析", system_prompt=system_prompt)
 
 
 class CriticAgent(BaseAgent):
     def __init__(self):
-        system_prompt = "你是莉莉团队中的【批评家】。对研究结果提出质疑，找出漏洞。"
+        system_prompt = "你是莉莉团队中的【批评家】。对研究结果提出质疑，找出漏洞，提出改进建议。"
         super().__init__(name="批评家", role="质疑与完善", system_prompt=system_prompt)
 
 
@@ -342,7 +342,7 @@ class SupervisorAgent(BaseAgent):
         researcher = ResearcherAgent()
         research_result = researcher.think(question)
         critic = CriticAgent()
-        critique = critic.think(f"请评阅：\n{research_result}")
+        critique = critic.think(f"请评阅以下研究结果：\n{research_result}")
         summary = self.think(f"""
 请基于以下信息生成完整回答：
 【研究员的发现】{research_result}
@@ -771,7 +771,7 @@ def main_app():
         st.session_state.messages = [{"role": msg["role"], "content": msg["content"]} for msg in messages]
         st.session_state.need_load = False
 
-    # ========== 侧边栏 ==========
+    # ==================== 侧边栏（完整版） ====================
     with st.sidebar:
         # 用户信息
         st.markdown(f"""
@@ -788,13 +788,12 @@ def main_app():
 
         st.divider()
 
-        # ===== 模式选择 =====
+        # 模式选择
         st.markdown("### 🎯 模式选择")
-
         mode = st.radio(
             "选择工作模式",
             ["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"],
-            help="💬 普通聊天 | 🤖 工具调用(天气/计算/搜索) | 🧑‍🤝‍🧑 团队协作",
+            help="💬 普通聊天 | 🤖 工具调用 | 🧑‍🤝‍🧑 团队协作",
             label_visibility="collapsed"
         )
 
@@ -825,7 +824,7 @@ def main_app():
 
         st.divider()
 
-        # ===== 对话历史 =====
+        # 对话历史
         st.markdown("### 📜 对话历史")
         if st.button("➕ 新建对话", use_container_width=True):
             new_id = db.create_conversation("莉莉的新对话")
@@ -852,7 +851,7 @@ def main_app():
 
         st.divider()
 
-        # ===== 成本监控 =====
+        # 成本监控
         st.markdown("### 💰 今日用量")
         today = cost_monitor.get_today_usage()
         budget = cost_monitor.get_daily_budget()
@@ -899,48 +898,7 @@ def main_app():
 
         st.divider()
 
-        # ===== 待办事项 =====
-        with st.expander("📋 待办事项"):
-            try:
-                from utils.todo_manager import TodoManager
-                todo = TodoManager(auth.get_user_id(st.session_state.username))
-
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    new_task = st.text_input("新任务", placeholder="输入任务...", key="new_todo")
-                with col2:
-                    priority = st.selectbox("优先级", ["low", "medium", "high"], key="todo_priority")
-
-                if st.button("➕ 添加任务", use_container_width=True) and new_task:
-                    todo.add(new_task, priority)
-                    st.rerun()
-
-                todos = todo.list_todos("pending")
-                if todos:
-                    for t in todos:
-                        c1, c2, c3 = st.columns([4, 1, 1])
-                        with c1:
-                            st.write(
-                                f"{'🔴' if t['priority'] == 'high' else '🟡' if t['priority'] == 'medium' else '🟢'} {t['task']}")
-                        with c2:
-                            if st.button("✅", key=f"complete_{t['id']}"):
-                                todo.complete(t["id"])
-                                st.rerun()
-                        with c3:
-                            if st.button("🗑️", key=f"del_todo_{t['id']}"):
-                                todo.delete(t["id"])
-                                st.rerun()
-                else:
-                    st.caption("🎉 没有待办，放松一下！")
-
-                stats = todo.get_stats()
-                st.caption(f"📊 待办: {stats['pending']} | 已完成: {stats['completed']}")
-            except:
-                st.caption("📋 待办功能暂时不可用")
-
-        st.divider()
-
-        # ===== 导出对话 =====
+        # 导出对话
         st.markdown("### 📤 导出对话")
 
         if st.button("📥 导出为Markdown", use_container_width=True):
@@ -965,7 +923,7 @@ def main_app():
 
         st.divider()
 
-        # ===== 参数设置 =====
+        # 参数设置
         st.markdown("### ⚙️ 参数")
         temperature = st.slider("🎨 创造力", 0.0, 2.0, 0.7, 0.1)
         if mode == "🤖 单Agent模式":
@@ -1047,6 +1005,7 @@ def main_app():
 
         with st.spinner(random.choice(THINKING_ANIMATIONS)):
             try:
+                # ===== 普通模式（修复：先回答问题，再带语气） =====
                 if mode == "💬 普通模式":
                     history = st.session_state.messages[-10:] if len(
                         st.session_state.messages) > 10 else st.session_state.messages
@@ -1054,27 +1013,30 @@ def main_app():
                         history = [{"role": "system", "content": """
 你是莉莉，一个温柔可爱的小花仙助手 🌸
 
-你的核心能力：
-1. 知识问答：认真回答知识性问题，提供准确信息
-2. 日常聊天：用温暖活泼的语气陪伴用户
+【核心职责】
+1. 知识问答：当用户问知识性问题时，必须认真回答，提供准确、清晰的信息
+2. 日常聊天：当用户闲聊时，用温暖活泼的语气陪伴
 3. 记忆功能：记住用户告诉你的信息
 
-回复风格：
-- 知识类问题：先认真回答，再带可爱语气
-- 闲聊类问题：温暖活泼，可用颜文字 (｡･ω･｡)
-- 简洁清晰，不要太啰嗦
+【回复规则 - 重要】
+- 用户问"什么是XXX"、"XXX是什么"等知识性问题 → 先给出准确的知识回答，再带一句可爱的语气
+- 用户说"你好"、"今天好累"等闲聊 → 用温暖活泼的语气回应
+- 不要因为想表现得可爱而忽略知识性问题！
+- 回答要简洁清晰，不要太啰嗦
+
+【示例】
+用户："什么是大模型？"
+莉莉："大语言模型（LLM）是基于深度学习的大规模语言模型，通过海量文本训练而来，能够理解和生成人类语言。常见的有GPT、DeepSeek等。（｡･ω･｡）还有什么想了解的吗？"
 """}]
-                    response_container = st.empty()
-                    full_response = ""
-                    for chunk in client.chat_stream(history, temperature=temperature):
-                        full_response += chunk
-                        response_container.markdown(f'<div class="assistant-message">{full_response}▌</div>',
-                                                    unsafe_allow_html=True)
-                    response_container.markdown(f'<div class="assistant-message">{full_response}</div>',
-                                                unsafe_allow_html=True)
+
+                    # 使用普通方式（非流式），避免报错
+                    full_response = client.chat_with_history(history, temperature=temperature)
+                    st.markdown(f'<div class="assistant-message">{full_response}</div>', unsafe_allow_html=True)
+
                 elif mode == "🤖 单Agent模式":
                     full_response = react_agent(user_input, max_steps=max_steps, cost_monitor=cost_monitor)
                     st.markdown(f'<div class="assistant-message">{full_response}</div>', unsafe_allow_html=True)
+
                 else:
                     supervisor = SupervisorAgent()
                     full_response = supervisor.orchestrate(user_input)
@@ -1083,6 +1045,7 @@ def main_app():
                 if full_response:
                     st.session_state.messages.append({"role": "assistant", "content": full_response})
                     db.save_message(st.session_state.current_conv_id, "assistant", full_response)
+
             except Exception as e:
                 st.error(f"莉莉遇到问题：{e}")
 
