@@ -64,4 +64,49 @@ def get_weather_amap(city: str) -> dict:
             } if tomorrow else None
         }
     except Exception as e:
+
         return {"error": f"查询失败：{str(e)}"}
+
+
+# ==================== 文档解析 ====================
+
+import io
+import PyPDF2
+import docx
+
+
+def parse_uploaded_file(uploaded_file) -> str:
+    """解析上传的文件内容"""
+    filename = uploaded_file.name
+    content = ""
+
+    try:
+        # TXT文件
+        if filename.endswith(".txt"):
+            content = uploaded_file.getvalue().decode("utf-8")
+
+        # PDF文件
+        elif filename.endswith(".pdf"):
+            reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.getvalue()))
+            for page in reader.pages:
+                text = page.extract_text()
+                if text:
+                    content += text + "\n"
+
+        # Word文档
+        elif filename.endswith(".docx"):
+            doc = docx.Document(io.BytesIO(uploaded_file.getvalue()))
+            for para in doc.paragraphs:
+                if para.text:
+                    content += para.text + "\n"
+
+        else:
+            return f"不支持的文件格式：{filename}"
+
+        if not content.strip():
+            return "文件内容为空"
+
+        return content[:10000]  # 限制长度
+
+    except Exception as e:
+        return f"解析失败：{str(e)}"
