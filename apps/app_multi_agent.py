@@ -707,6 +707,31 @@ def main_app():
             st.session_state.quick_input = random.choice(questions)
             st.rerun()
 
+    # ========== 文件上传 ==========
+    with st.expander("📚 上传文档让莉莉阅读"):
+        uploaded_file = st.file_uploader(
+            "支持 TXT、PDF、Word",
+            type=["txt", "pdf", "docx"],
+            key="file_upload"
+        )
+
+        if uploaded_file:
+            from utils.api_tools import parse_uploaded_file
+            content = parse_uploaded_file(uploaded_file)
+
+            if "失败" in content or "不支持" in content:
+                st.error(content)
+            else:
+                st.session_state.doc_content = content
+                st.session_state.doc_name = uploaded_file.name
+                st.success(f"✅ 已解析 {uploaded_file.name}，共 {len(content)} 字符")
+
+                if st.button("📌 将文档加入对话上下文"):
+                    st.session_state.file_context = content
+                    st.success("✅ 文档已加入上下文，现在可以提问了！")
+
+
+
     # ---- 输入框 ----
     if "quick_input" in st.session_state and st.session_state.quick_input:
         user_input = st.session_state.quick_input
@@ -723,19 +748,36 @@ def main_app():
             title = user_input[:20] + "..." if len(user_input) > 20 else user_input
             db.update_conversation_title(st.session_state.current_conv_id, title)
 
+    if user_input:
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        st.chat_message("user").write(user_input)
+        db.save_message(st.session_state.current_conv_id, "user", user_input)
+
+        if db.get_conversation_title(st.session_state.current_conv_id) == "新对话":
+            title = user_input[:20] + "..." if len(user_input) > 20 else user_input
+            db.update_conversation_title(st.session_state.current_conv_id, title)
+
         with st.spinner("莉莉正在思考..."):
             try:
-                if mode == "💬 普通模式":
-                    history = [{"role": "system", "content": "你是莉莉，一个温柔可爱的AI助手。回答要简洁清晰、有帮助。"}]
+                # ===== 普通模式 =====
+                if mode == "普通模式":
+                    system_prompt = "你是莉莉，一个温柔可爱的AI助手。回答要简洁清晰、有帮助。"
+
+                    if "file_context" in st.session_state and st.session_state.file_context:
+                        system_prompt += f"\n\n【用户上传的文档内容】\n{st.session_state.file_context[:3000]}\n\n请基于文档内容回答问题。"
+
+                    history = [{"role": "system", "content": system_prompt}]
                     for msg in st.session_state.messages[-10:]:
                         history.append(msg)
+
                     response = client.chat_with_history(history, temperature=temperature)
 
-                elif mode == "🤖 单Agent模式":
+                # ===== 单Agent模式 =====
+                elif mode == "单Agent模式":
                     response = react_agent(user_input, max_steps=3)
 
+                # ===== 多Agent模式 =====
                 else:
-                    # 多Agent模式（简化版）
                     response = f"🧑‍🤝‍🧑 多Agent团队正在分析你的问题...\n\n{react_agent(user_input, max_steps=2)}"
 
                 st.chat_message("assistant").write(response)
