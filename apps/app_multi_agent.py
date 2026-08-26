@@ -1,5 +1,5 @@
 """
-莉莉 - 完整版（侧边栏已修复）
+莉莉 - 完整版（已接入高德地图API真实天气）
 """
 
 import streamlit as st
@@ -297,29 +297,232 @@ class DeepSeekClient:
             return f"⚠️ 调用失败：{str(e)}"
 
 
-# ==================== 工具函数 ====================
+# ==================== 高德地图API（真实天气） ====================
 
-def get_weather(city: str) -> dict:
-    """模拟天气查询"""
-    weathers = ["晴天☀️", "多云⛅", "小雨🌧️", "大雪❄️", "雾霾😷"]
-    temps = list(range(-5, 36))
-    return {
-        "city": city,
-        "weather": random.choice(weathers),
-        "temperature": random.choice(temps),
-        "humidity": random.randint(30, 90)
-    }
+def get_weather_amap(city: str) -> dict:
+    """使用高德地图API查询真实天气"""
+    api_key = os.getenv("AMAP_API_KEY")
+    if not api_key:
+        try:
+            api_key = st.secrets.get("AMAP_API_KEY")
+        except:
+            pass
+
+    if not api_key:
+        return {"error": "❌ 高德API Key未配置，请在.env或Secrets中设置 AMAP_API_KEY"}
+
+    try:
+        # 1. 地理编码：获取城市adcode
+        geo_url = "https://restapi.amap.com/v3/geocode/geo"
+        geo_params = {"key": api_key, "address": city}
+        geo_resp = requests.get(geo_url, params=geo_params, timeout=10)
+        geo_data = geo_resp.json()
+
+        if geo_data.get("status") != "1" or not geo_data.get("geocodes"):
+            return {"error": f"未找到城市：{city}"}
+
+        adcode = geo_data["geocodes"][0]["adcode"]
+
+        # 2. 查询天气
+        weather_url = "https://restapi.amap.com/v3/weather/weatherInfo"
+        weather_params = {"key": api_key, "city": adcode, "extensions": "all"}
+        weather_resp = requests.get(weather_url, params=weather_params, timeout=10)
+        weather_data = weather_resp.json()
+
+        if weather_data.get("status") != "1":
+            return {"error": "天气查询失败，请稍后重试"}
+
+        forecast = weather_data["forecasts"][0]
+        casts = forecast.get("casts", [])
+
+        if not casts:
+            return {"error": "暂无天气数据"}
+
+        today = casts[0]
+        tomorrow = casts[1] if len(casts) > 1 else None
+
+        return {
+            "city": forecast["city"],
+            "today": {
+                "date": today.get("date", ""),
+                "weather": today.get("dayweather", ""),
+                "temperature": f"{today.get('nighttemp', '')}°C ~ {today.get('daytemp', '')}°C",
+                "wind": today.get("daywind", ""),
+                "daytemp": today.get("daytemp", ""),
+                "nighttemp": today.get("nighttemp", ""),
+                "dayweather": today.get("dayweather", ""),
+                "nightweather": today.get("nightweather", "")
+            },
+            "tomorrow": {
+                "date": tomorrow.get("date", ""),
+                "weather": tomorrow.get("dayweather", ""),
+                "temperature": f"{tomorrow.get('nighttemp', '')}°C ~ {tomorrow.get('daytemp', '')}°C"
+            } if tomorrow else None
+        }
+
+    except requests.exceptions.Timeout:
+        return {"error": "请求超时，请稍后重试"}
+    except Exception as e:
+        return {"error": f"查询失败：{str(e)}"}
 
 
-def search(query: str) -> dict:
-    """模拟搜索"""
+# ==================== 工具函数（数学计算 + 搜索） ====================
+
+def calculate(expression: str) -> dict:
+    """数学计算"""
+    allowed_chars = r'[\d+\-*/().% ]'
+    if not re.match(f'^{allowed_chars}+$', expression):
+        return {"expression": expression, "error": "表达式包含非法字符", "result": None}
+    try:
+        result = eval(expression, {"__builtins__": {}}, {"math": math})
+        return {"expression": expression, "result": result, "error": None}
+    except Exception as e:
+        return {"expression": expression, "result": None, "error": str(e)}
+
+
+def web_search(query: str) -> dict:
+    """模拟网络搜索"""
     return {
         "query": query,
         "results": [
-            {"title": f"关于 '{query}' 的搜索结果1", "content": "这是模拟搜索结果的内容"},
-            {"title": f"关于 '{query}' 的搜索结果2", "content": "这是模拟搜索结果的内容"}
+            {"title": f"关于 '{query}' 的搜索结果 1", "content": "这是模拟搜索结果的内容"},
+            {"title": f"关于 '{query}' 的搜索结果 2", "content": "这是模拟搜索结果的内容"}
         ]
     }
+
+
+def get_weather_tool_desc():
+    return {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "查询城市天气，支持中国城市",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "城市名称，如：北京、上海、深圳"}
+                },
+                "required": ["city"]
+            }
+        }
+    }
+
+
+def get_calc_tool_desc():
+    return {
+        "type": "function",
+        "function": {
+            "name": "calculate",
+            "description": "执行数学计算",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "数学表达式，如 '2 + 3 * 4'"}
+                },
+                "required": ["expression"]
+            }
+        }
+    }
+
+
+def get_search_tool_desc():
+    return {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "搜索网络信息",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "搜索关键词"}
+                },
+                "required": ["query"]
+            }
+        }
+    }
+
+
+# ==================== 单Agent 核心 ====================
+
+TOOLS = {
+    "get_weather": {"function": get_weather_amap, "description": get_weather_tool_desc()},
+    "calculate": {"function": calculate, "description": get_calc_tool_desc()},
+    "web_search": {"function": web_search, "description": get_search_tool_desc()}
+}
+
+
+def get_tools_schema():
+    return [TOOLS[name]["description"] for name in TOOLS]
+
+
+def execute_tool(tool_name: str, arguments: dict):
+    if tool_name not in TOOLS:
+        return {"error": f"未知工具: {tool_name}"}
+    try:
+        result = TOOLS[tool_name]["function"](**arguments)
+        return result
+    except Exception as e:
+        return {"error": f"工具执行失败: {str(e)}"}
+
+
+def react_agent(question: str, max_steps: int = 3):
+    """单Agent主函数"""
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        try:
+            api_key = st.secrets.get("DEEPSEEK_API_KEY")
+        except:
+            pass
+    if not api_key:
+        return "❌ API Key未设置"
+
+    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
+
+    messages = [
+        {"role": "system", "content": """你是莉莉，一个智能助手。你能调用工具来帮助回答问题。
+
+可用工具：
+1. get_weather - 查询城市天气（支持中国城市）
+2. calculate - 执行数学计算
+3. web_search - 搜索网络信息
+"""},
+        {"role": "user", "content": question}
+    ]
+
+    step = 0
+    while step < max_steps:
+        step += 1
+        try:
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=messages,
+                tools=get_tools_schema(),
+                tool_choice="auto",
+                temperature=0.3
+            )
+        except Exception as e:
+            return f"调用API失败：{str(e)}"
+
+        assistant_message = response.choices[0].message
+
+        if assistant_message.tool_calls:
+            messages.append(assistant_message)
+            for tool_call in assistant_message.tool_calls:
+                tool_name = tool_call.function.name
+                try:
+                    arguments = json.loads(tool_call.function.arguments)
+                except:
+                    arguments = {}
+                result = execute_tool(tool_name, arguments)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": json.dumps(result, ensure_ascii=False)
+                })
+        else:
+            return assistant_message.content
+
+    return "抱歉，我思考太久了"
 
 
 # ==================== 登录界面 ====================
@@ -406,10 +609,9 @@ def main_app():
         st.session_state.need_load = False
 
     # =============================================
-    # ========== 侧边栏（完整版，已修复） ==========
+    # ========== 侧边栏（完整版） ==========
     # =============================================
     with st.sidebar:
-        # ---- 用户信息 ----
         st.markdown(f"### 👤 {st.session_state.username}")
 
         if st.button("🚪 退出登录", use_container_width=True):
@@ -420,7 +622,6 @@ def main_app():
 
         st.divider()
 
-        # ---- 模式选择 ----
         st.markdown("### 🎯 模式选择")
         mode = st.radio(
             "选择模式",
@@ -437,7 +638,6 @@ def main_app():
 
         st.divider()
 
-        # ---- 对话历史 ----
         st.markdown("### 📜 对话历史")
 
         if st.button("➕ 新建对话", use_container_width=True):
@@ -467,19 +667,18 @@ def main_app():
 
         st.divider()
 
-        # ---- 参数设置 ----
         st.markdown("### ⚙️ 参数")
         temperature = st.slider("🎨 创造力", 0.0, 2.0, 0.7, 0.1)
 
         st.divider()
-        st.caption("🌸 莉莉 v1.0")
+        st.caption("🌸 莉莉 v2.0 | 已接入高德天气")
 
     # =============================================
     # ========== 主界面 ==========
     # =============================================
 
     st.title("🌸 莉莉")
-    st.caption("你的专属AI小助手")
+    st.caption("🌤️ 已接入高德地图真实天气 · 你的专属AI小助手")
 
     # ---- 显示消息 ----
     for msg in st.session_state.messages:
@@ -516,28 +715,37 @@ def main_app():
         user_input = st.chat_input("💬 和莉莉聊聊吧...")
 
     if user_input:
-        # 保存用户消息
         st.session_state.messages.append({"role": "user", "content": user_input})
         st.chat_message("user").write(user_input)
         db.save_message(st.session_state.current_conv_id, "user", user_input)
 
-        # 自动命名对话
         if db.get_conversation_title(st.session_state.current_conv_id) == "新对话":
             title = user_input[:20] + "..." if len(user_input) > 20 else user_input
             db.update_conversation_title(st.session_state.current_conv_id, title)
 
-        # 构建历史并调用
-        history = [{"role": "system", "content": "你是莉莉，一个温柔可爱的AI助手。回答要简洁清晰、有帮助。"}]
-        for msg in st.session_state.messages[-10:]:
-            history.append(msg)
-
         with st.spinner("莉莉正在思考..."):
-            response = client.chat_with_history(history, temperature=temperature)
+            try:
+                if mode == "💬 普通模式":
+                    history = [{"role": "system", "content": "你是莉莉，一个温柔可爱的AI助手。回答要简洁清晰、有帮助。"}]
+                    for msg in st.session_state.messages[-10:]:
+                        history.append(msg)
+                    response = client.chat_with_history(history, temperature=temperature)
 
-        # 保存并显示回复
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        st.chat_message("assistant").write(response)
-        db.save_message(st.session_state.current_conv_id, "assistant", response)
+                elif mode == "🤖 单Agent模式":
+                    response = react_agent(user_input, max_steps=3)
+
+                else:
+                    # 多Agent模式（简化版）
+                    response = f"🧑‍🤝‍🧑 多Agent团队正在分析你的问题...\n\n{react_agent(user_input, max_steps=2)}"
+
+                st.chat_message("assistant").write(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                db.save_message(st.session_state.current_conv_id, "assistant", response)
+
+            except Exception as e:
+                st.error(f"莉莉遇到问题：{e}")
+
+    st.caption("💡 提示：在单Agent模式下输入城市名称可查真实天气")
 
 
 # ==================== 主入口 ====================
@@ -548,11 +756,9 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = None
 
-# 设置页面配置
 st.set_page_config(page_title="🌸 莉莉", page_icon="🌸", layout="wide")
 
 if not st.session_state.logged_in:
     show_login_page()
 else:
     main_app()
-
