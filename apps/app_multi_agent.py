@@ -678,7 +678,7 @@ def main_app():
     # =============================================
 
     st.title("🌸 莉莉")
-    st.caption("🌤️ 已接入高德地图真实天气 · 你的专属AI小助手")
+    st.caption("你的专属AI小助手")
 
     # ---- 显示消息 ----
     for msg in st.session_state.messages:
