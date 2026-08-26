@@ -708,7 +708,7 @@ def main_app():
             st.rerun()
 
     # ========== 文件上传 ==========
-    with st.expander("📚 上传文档让莉莉阅读"):
+    with st.expander("📚 上传文档"):
         uploaded_file = st.file_uploader(
             "支持 TXT、PDF、Word",
             type=["txt", "pdf", "docx"],
