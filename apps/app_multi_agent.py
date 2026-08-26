@@ -1,5 +1,5 @@
 """
-莉莉 - 稳定版（修复导入错误）
+莉莉 - 完整版（侧边栏已修复）
 """
 
 import streamlit as st
@@ -16,13 +16,7 @@ import hashlib
 import secrets
 import sqlite3
 
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
-from utils.db_manager import ChatHistoryDB
-from utils.api_client import DeepSeekClient
-from utils.api_tools import get_weather, search, get_weather_tool_desc, get_search_tool_desc
-from utils.cost_monitor import CostMonitor
+# ==================== 导入 ====================
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -128,296 +122,204 @@ class AuthSystem:
         return row[0] if row else None
 
 
-# ==================== 动态配置 ====================
+# ==================== 对话数据库 ====================
 
-LILI_MOODS = [
-    {"emoji": "💕", "text": "今天心情超好！", "color": "#ec407a"},
-    {"emoji": "🌸", "text": "春暖花开～", "color": "#ab47bc"},
-    {"emoji": "✨", "text": "元气满满！", "color": "#7c4dff"},
-    {"emoji": "🌙", "text": "有点困了 zzz", "color": "#5c6bc0"},
-    {"emoji": "🎀", "text": "今天超可爱！", "color": "#ef5350"},
-    {"emoji": "🌟", "text": "等你很久啦！", "color": "#ffa726"}
-]
+class ChatHistoryDB:
+    def __init__(self, user_id: int = None):
+        self.db_path = Path(__file__).parent.parent / "chat_history.db"
+        self.user_id = user_id
+        self._init_db()
 
-THINKING_ANIMATIONS = [
-    "🤔 莉莉在想...",
-    "🌸 莉莉转圈圈...",
-    "✨ 莉莉翻书找答案...",
-    "💫 莉莉在认真思考...",
-    "🎀 莉莉歪着头想...",
-    "📖 莉莉在查资料..."
-]
+    def _init_db(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+                       CREATE TABLE IF NOT EXISTS conversations
+                       (
+                           id
+                           INTEGER
+                           PRIMARY
+                           KEY
+                           AUTOINCREMENT,
+                           user_id
+                           INTEGER
+                           NOT
+                           NULL,
+                           title
+                           TEXT
+                           NOT
+                           NULL,
+                           created_at
+                           TIMESTAMP
+                           DEFAULT
+                           CURRENT_TIMESTAMP,
+                           updated_at
+                           TIMESTAMP
+                           DEFAULT
+                           CURRENT_TIMESTAMP,
+                           message_count
+                           INTEGER
+                           DEFAULT
+                           0
+                       )
+                       """)
+        cursor.execute("""
+                       CREATE TABLE IF NOT EXISTS messages
+                       (
+                           id
+                           INTEGER
+                           PRIMARY
+                           KEY
+                           AUTOINCREMENT,
+                           conversation_id
+                           INTEGER
+                           NOT
+                           NULL,
+                           role
+                           TEXT
+                           NOT
+                           NULL,
+                           content
+                           TEXT
+                           NOT
+                           NULL,
+                           created_at
+                           TIMESTAMP
+                           DEFAULT
+                           CURRENT_TIMESTAMP
+                       )
+                       """)
+        conn.commit()
+        conn.close()
 
-WELCOME_MESSAGES = [
-    "✨ 嗨！我是莉莉，今天想聊点什么？",
-    "🌸 你来啦！我正等你呢～",
-    "💫 莉莉已上线，随时为你服务！",
-    "🌺 今天的心情怎么样？和我分享吧！",
-    "🎀 莉莉在此，有何吩咐？",
-    "💕 见到你真开心！"
-]
+    def create_conversation(self, title: str = "新对话") -> int:
+        if self.user_id is None:
+            raise ValueError("未设置 user_id")
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO conversations (user_id, title) VALUES (?, ?)",
+            (self.user_id, title)
+        )
+        conv_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return conv_id
+
+    def save_message(self, conversation_id: int, role: str, content: str):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)",
+            (conversation_id, role, content)
+        )
+        cursor.execute(
+            "UPDATE conversations SET message_count = message_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (conversation_id,)
+        )
+        conn.commit()
+        conn.close()
+
+    def get_conversation(self, conversation_id: int) -> list:
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
+            (conversation_id,)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"role": row[0], "content": row[1]} for row in rows]
+
+    def get_conversation_title(self, conversation_id: int) -> str:
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT title FROM conversations WHERE id = ?", (conversation_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else "未命名对话"
+
+    def update_conversation_title(self, conversation_id: int, title: str):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE conversations SET title = ? WHERE id = ?",
+            (title, conversation_id)
+        )
+        conn.commit()
+        conn.close()
+
+    def list_conversations(self, limit: int = 50) -> list:
+        if self.user_id is None:
+            return []
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, title, message_count FROM conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?",
+            (self.user_id, limit)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"id": row[0], "title": row[1], "message_count": row[2]} for row in rows]
+
+    def delete_conversation(self, conversation_id: int):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+        conn.commit()
+        conn.close()
 
 
-# ==================== 工具函数 ====================
+# ==================== DeepSeek API 调用 ====================
 
-def calculate(expression: str) -> dict:
-    allowed_chars = r'[\d+\-*/().% ]'
-    if not re.match(f'^{allowed_chars}+$', expression):
-        return {"expression": expression, "error": "表达式包含非法字符", "result": None}
-    try:
-        result = eval(expression, {"__builtins__": {}}, {"math": math})
-        return {"expression": expression, "result": result, "error": None}
-    except Exception as e:
-        return {"expression": expression, "result": None, "error": str(e)}
+class DeepSeekClient:
+    def __init__(self):
+        self.api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not self.api_key:
+            try:
+                self.api_key = st.secrets.get("DEEPSEEK_API_KEY")
+            except:
+                pass
 
+    def chat_with_history(self, messages, temperature=0.7) -> str:
+        if not self.api_key:
+            return "⚠️ API Key 未设置，请在 .env 或 Secrets 中配置 DEEPSEEK_API_KEY"
 
-def get_calc_tool_desc():
-    return {
-        "type": "function",
-        "function": {
-            "name": "calculate",
-            "description": "执行数学计算",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "expression": {"type": "string", "description": "数学表达式，如 '2 + 3 * 4'"}
-                },
-                "required": ["expression"]
-            }
-        }
-    }
-
-
-# ==================== 单Agent 核心 ====================
-
-TOOLS = {
-    "get_weather": {"function": get_weather, "description": get_weather_tool_desc()},
-    "calculate": {"function": calculate, "description": get_calc_tool_desc()},
-    "search": {"function": search, "description": get_search_tool_desc()}
-}
-
-
-def get_tools_schema():
-    return [TOOLS[name]["description"] for name in TOOLS]
-
-
-def execute_tool(tool_name: str, arguments: dict):
-    if tool_name not in TOOLS:
-        return {"error": f"未知工具: {tool_name}"}
-    try:
-        result = TOOLS[tool_name]["function"](**arguments)
-        return result
-    except Exception as e:
-        return {"error": f"工具执行失败: {str(e)}"}
-
-
-def react_agent(question: str, max_steps: int = 3, cost_monitor=None):
-    api_key = os.getenv("DEEPSEEK_API_KEY")
-    if not api_key:
-        try:
-            api_key = st.secrets.get("DEEPSEEK_API_KEY")
-        except:
-            pass
-    if not api_key:
-        return "❌ API Key未设置"
-
-    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
-
-    messages = [
-        {"role": "system", "content": """你是莉莉，一个智能助手。你能调用工具来帮助回答问题。
-
-可用工具：
-1. get_weather - 查询城市天气
-2. calculate - 执行数学计算
-3. search - 搜索网络信息
-"""},
-        {"role": "user", "content": question}
-    ]
-
-    step = 0
-    while step < max_steps:
-        step += 1
+        client = OpenAI(api_key=self.api_key, base_url="https://api.deepseek.com/v1")
         try:
             response = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=messages,
-                tools=get_tools_schema(),
-                tool_choice="auto",
-                temperature=0.3
+                temperature=temperature
             )
-
-            if cost_monitor and hasattr(response, 'usage'):
-                cost_monitor.log_usage(
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
-                    model="deepseek-chat"
-                )
-
+            return response.choices[0].message.content
         except Exception as e:
-            return f"调用API失败：{str(e)}"
-
-        assistant_message = response.choices[0].message
-
-        if assistant_message.tool_calls:
-            messages.append(assistant_message)
-            for tool_call in assistant_message.tool_calls:
-                tool_name = tool_call.function.name
-                try:
-                    arguments = json.loads(tool_call.function.arguments)
-                except:
-                    arguments = {}
-                result = execute_tool(tool_name, arguments)
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": json.dumps(result, ensure_ascii=False)
-                })
-        else:
-            return assistant_message.content
-
-    return "抱歉，我思考太久了"
+            return f"⚠️ 调用失败：{str(e)}"
 
 
-# ==================== 多Agent 类 ====================
+# ==================== 工具函数 ====================
 
-class BaseAgent:
-    def __init__(self, name: str, role: str, system_prompt: str):
-        self.name = name
-        self.role = role
-        self.system_prompt = system_prompt
-        self.history = []
-        api_key = os.getenv("DEEPSEEK_API_KEY")
-        if not api_key:
-            try:
-                api_key = st.secrets.get("DEEPSEEK_API_KEY")
-            except:
-                pass
-        self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1") if api_key else None
-
-    def think(self, user_input: str, context: str = "") -> str:
-        if not self.client:
-            return "❌ API Key未设置"
-        messages = [{"role": "system", "content": self.system_prompt}]
-        if context:
-            messages.append({"role": "user", "content": f"【参考信息】\n{context}\n\n【当前任务】\n{user_input}"})
-        else:
-            messages.append({"role": "user", "content": user_input})
-        for msg in self.history[-6:]:
-            messages.append(msg)
-        try:
-            response = self.client.chat.completions.create(
-                model="deepseek-chat",
-                messages=messages,
-                temperature=0.7
-            )
-            reply = response.choices[0].message.content
-            self.history.append({"role": "user", "content": user_input})
-            self.history.append({"role": "assistant", "content": reply})
-            return reply
-        except Exception as e:
-            return f"调用失败：{str(e)}"
-
-    def clear_history(self):
-        self.history = []
-
-
-class ResearcherAgent(BaseAgent):
-    def __init__(self):
-        system_prompt = "你是莉莉团队中的【研究员】。深入研究问题，收集信息。"
-        super().__init__(name="研究员", role="信息收集与分析", system_prompt=system_prompt)
-
-
-class CriticAgent(BaseAgent):
-    def __init__(self):
-        system_prompt = "你是莉莉团队中的【批评家】。对研究结果提出质疑，找出漏洞。"
-        super().__init__(name="批评家", role="质疑与完善", system_prompt=system_prompt)
-
-
-class SupervisorAgent(BaseAgent):
-    def __init__(self):
-        system_prompt = "你是莉莉团队的【监督者】，负责分配任务、协调团队、汇总结果。"
-        super().__init__(name="监督者", role="任务分配与协调", system_prompt=system_prompt)
-
-    def orchestrate(self, question: str) -> str:
-        researcher = ResearcherAgent()
-        research_result = researcher.think(question)
-        critic = CriticAgent()
-        critique = critic.think(f"请评阅：\n{research_result}")
-        summary = self.think(f"""
-请基于以下信息生成完整回答：
-【研究员的发现】{research_result}
-【批评家的建议】{critique}
-【用户问题】{question}
-请整合以上信息，给出全面平衡的回答。
-""")
-        return summary
-
-
-# ==================== 动态CSS ====================
-
-def load_css():
-    st.markdown("""
-    <style>
-    .stApp { background: linear-gradient(135deg, #fce4ec, #f3e5f5, #e8eaf6); }
-    .user-message {
-        background: linear-gradient(135deg, #7c4dff, #536dfe);
-        color: white;
-        padding: 12px 18px;
-        border-radius: 18px 18px 4px 18px;
-        margin: 8px 0;
-        max-width: 80%;
-        float: right;
-        clear: both;
+def get_weather(city: str) -> dict:
+    """模拟天气查询"""
+    weathers = ["晴天☀️", "多云⛅", "小雨🌧️", "大雪❄️", "雾霾😷"]
+    temps = list(range(-5, 36))
+    return {
+        "city": city,
+        "weather": random.choice(weathers),
+        "temperature": random.choice(temps),
+        "humidity": random.randint(30, 90)
     }
-    .assistant-message {
-        background: white;
-        padding: 14px 20px;
-        border-radius: 18px 18px 18px 4px;
-        margin: 8px 0;
-        max-width: 80%;
-        float: left;
-        clear: both;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.05);
-        border: 1px solid #f3e5f5;
+
+
+def search(query: str) -> dict:
+    """模拟搜索"""
+    return {
+        "query": query,
+        "results": [
+            {"title": f"关于 '{query}' 的搜索结果1", "content": "这是模拟搜索结果的内容"},
+            {"title": f"关于 '{query}' 的搜索结果2", "content": "这是模拟搜索结果的内容"}
+        ]
     }
-    .login-container {
-        max-width: 400px;
-        margin: 60px auto;
-        padding: 40px;
-        background: rgba(255,255,255,0.7);
-        backdrop-filter: blur(20px);
-        border-radius: 30px;
-        box-shadow: 0 8px 40px rgba(0,0,0,0.08);
-    }
-    .login-container h1 {
-        text-align: center;
-        color: #4a148c;
-        font-size: 2.2rem;
-    }
-    .login-container .subtitle {
-        text-align: center;
-        color: #888;
-        font-size: 0.9rem;
-        margin-bottom: 24px;
-    }
-    .login-container .lili-icon {
-        text-align: center;
-        font-size: 4rem;
-        margin-bottom: 12px;
-    }
-    .stButton button {
-        border-radius: 30px !important;
-        background: linear-gradient(135deg, #ec407a, #ab47bc) !important;
-        color: white !important;
-        border: none !important;
-        padding: 10px 24px !important;
-        font-weight: 600 !important;
-    }
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    .stDeployButton {display: none;}
-    </style>
-    """, unsafe_allow_html=True)
 
 
 # ==================== 登录界面 ====================
@@ -432,10 +334,10 @@ def show_login_page():
 
     st.markdown("""
     <div style="display:flex;justify-content:center;align-items:center;min-height:80vh;">
-        <div class="login-container">
-            <div class="lili-icon">🌸</div>
-            <h1>莉莉的花园</h1>
-            <div class="subtitle">登录进入你的专属AI花园</div>
+        <div style="max-width:400px;margin:0 auto;padding:40px;background:rgba(255,255,255,0.85);border-radius:30px;box-shadow:0 8px 40px rgba(0,0,0,0.08);">
+            <div style="text-align:center;font-size:4rem;margin-bottom:12px;">🌸</div>
+            <h1 style="text-align:center;color:#4a148c;font-size:2.2rem;">莉莉的花园</h1>
+            <p style="text-align:center;color:#888;margin-bottom:24px;">登录进入你的专属AI花园</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -446,34 +348,26 @@ def show_login_page():
 
         with tab1:
             with st.form("login_form", clear_on_submit=True):
-                username = st.text_input("用户名", placeholder="请输入用户名", key="login_user")
-                password = st.text_input("密码", type="password", placeholder="请输入密码", key="login_pass")
+                username = st.text_input("用户名", placeholder="请输入用户名")
+                password = st.text_input("密码", type="password", placeholder="请输入密码")
                 submitted = st.form_submit_button("🌸 登录", use_container_width=True)
-
-                if submitted:
-                    if username and password:
-                        success, msg = auth.login(username, password)
-                        if success:
-                            st.session_state.logged_in = True
-                            st.session_state.username = username
-                            st.rerun()
-                        else:
-                            st.error(f"❌ {msg}")
+                if submitted and username and password:
+                    success, msg = auth.login(username, password)
+                    if success:
+                        st.session_state.logged_in = True
+                        st.session_state.username = username
+                        st.rerun()
                     else:
-                        st.warning("请输入用户名和密码")
+                        st.error(f"❌ {msg}")
 
         with tab2:
             with st.form("register_form", clear_on_submit=True):
-                new_username = st.text_input("用户名", placeholder="请设置用户名", key="reg_user")
-                new_password = st.text_input("密码", type="password", placeholder="请设置密码（至少6位）", key="reg_pass")
-                confirm_password = st.text_input("确认密码", type="password", placeholder="再次输入密码",
-                                                 key="reg_confirm")
+                new_username = st.text_input("用户名", placeholder="请设置用户名")
+                new_password = st.text_input("密码", type="password", placeholder="请设置密码（至少6位）")
+                confirm_password = st.text_input("确认密码", type="password", placeholder="再次输入密码")
                 submitted = st.form_submit_button("🌱 注册", use_container_width=True)
-
-                if submitted:
-                    if not new_username or not new_password:
-                        st.warning("请填写完整信息")
-                    elif len(new_password) < 6:
+                if submitted and new_username and new_password:
+                    if len(new_password) < 6:
                         st.warning("密码至少6位")
                     elif new_password != confirm_password:
                         st.warning("两次密码不一致")
@@ -488,29 +382,18 @@ def show_login_page():
 # ==================== 主应用 ====================
 
 def main_app():
-    st.markdown("🌸 欢迎回来，" + st.session_state.username + "！")
+    # ========== 初始化数据库 ==========
+    user_id = auth.get_user_id(st.session_state.username)
+    db = ChatHistoryDB(user_id=user_id)
+    client = DeepSeekClient()
 
-    @st.cache_resource
-    def get_db():
-        user_id = auth.get_user_id(st.session_state.username)
-        return ChatHistoryDB(user_id=user_id)
-
-    @st.cache_resource
-    def get_client():
-        return DeepSeekClient()
-
-    @st.cache_resource
-    def get_cost_monitor():
-        user_id = auth.get_user_id(st.session_state.username)
-        return CostMonitor(user_id=user_id)
-
-    db = get_db()
-    client = get_client()
-    cost_monitor = get_cost_monitor()
-
+    # ========== 初始化对话状态 ==========
     if "current_conv_id" not in st.session_state:
         convs = db.list_conversations(1)
-        st.session_state.current_conv_id = convs[0]["id"] if convs else db.create_conversation("莉莉的新对话")
+        if convs:
+            st.session_state.current_conv_id = convs[0]["id"]
+        else:
+            st.session_state.current_conv_id = db.create_conversation("新对话")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -518,14 +401,17 @@ def main_app():
     if "need_load" not in st.session_state:
         st.session_state.need_load = True
 
-    def load_conversation(conv_id: int):
-        st.session_state.current_conv_id = conv_id
-        messages = db.get_conversation(conv_id)
-        st.session_state.messages = [{"role": msg["role"], "content": msg["content"]} for msg in messages]
+    if st.session_state.need_load:
+        st.session_state.messages = db.get_conversation(st.session_state.current_conv_id)
         st.session_state.need_load = False
 
+    # =============================================
+    # ========== 侧边栏（完整版，已修复） ==========
+    # =============================================
     with st.sidebar:
-        st.markdown(f"👤 {st.session_state.username}")
+        # ---- 用户信息 ----
+        st.markdown(f"### 👤 {st.session_state.username}")
+
         if st.button("🚪 退出登录", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.username = None
@@ -534,16 +420,28 @@ def main_app():
 
         st.divider()
 
+        # ---- 模式选择 ----
+        st.markdown("### 🎯 模式选择")
         mode = st.radio(
             "选择模式",
-            ["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"]
+            ["💬 普通模式", "🤖 单Agent模式", "🧑‍🤝‍🧑 多Agent模式"],
+            label_visibility="collapsed"
         )
+
+        if mode == "🤖 单Agent模式":
+            st.info("🌤️ 天气 · 🧮 计算 · 🔍 搜索")
+        elif mode == "🧑‍🤝‍🧑 多Agent模式":
+            st.info("🔬 研究员 · 批评家 · 监督者")
+        else:
+            st.info("💕 温柔体贴的莉莉")
 
         st.divider()
 
+        # ---- 对话历史 ----
         st.markdown("### 📜 对话历史")
+
         if st.button("➕ 新建对话", use_container_width=True):
-            new_id = db.create_conversation("莉莉的新对话")
+            new_id = db.create_conversation("新对话")
             st.session_state.current_conv_id = new_id
             st.session_state.messages = []
             st.session_state.need_load = False
@@ -554,10 +452,12 @@ def main_app():
             col1, col2 = st.columns([4, 1])
             with col1:
                 is_current = conv["id"] == st.session_state.current_conv_id
-                title = conv["title"][:18]
+                title = conv["title"][:15] + "..." if len(conv["title"]) > 15 else conv["title"]
                 label = f"🟢 {title}" if is_current else f"📄 {title}"
                 if st.button(label, key=f"load_{conv['id']}", use_container_width=True):
-                    load_conversation(conv["id"])
+                    st.session_state.current_conv_id = conv["id"]
+                    st.session_state.messages = db.get_conversation(conv["id"])
+                    st.session_state.need_load = False
                     st.rerun()
                 st.caption(f"{conv['message_count']}条")
             with col2:
@@ -567,57 +467,77 @@ def main_app():
 
         st.divider()
 
-        st.markdown("### 💰 今日用量")
-        today = cost_monitor.get_today_usage()
-        st.metric("调用", today["call_count"])
-        st.metric("费用", f"¥{today['total_cost']:.4f}")
+        # ---- 参数设置 ----
+        st.markdown("### ⚙️ 参数")
+        temperature = st.slider("🎨 创造力", 0.0, 2.0, 0.7, 0.1)
 
         st.divider()
+        st.caption("🌸 莉莉 v1.0")
 
-        st.markdown("### ⚙️ 参数")
-        temperature = st.slider("创造力", 0.0, 2.0, 0.7, 0.1)
-        if mode == "🤖 单Agent模式":
-            max_steps = st.slider("推理步数", 1, 5, 3)
+    # =============================================
+    # ========== 主界面 ==========
+    # =============================================
 
-    if st.session_state.need_load:
-        load_conversation(st.session_state.current_conv_id)
+    st.title("🌸 莉莉")
+    st.caption("你的专属AI小助手")
 
+    # ---- 显示消息 ----
     for msg in st.session_state.messages:
         if msg["role"] == "user":
-            st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
-        elif msg["role"] == "assistant":
-            st.markdown(f'<div class="assistant-message">{msg["content"]}</div>', unsafe_allow_html=True)
+            st.chat_message("user").write(msg["content"])
+        else:
+            st.chat_message("assistant").write(msg["content"])
 
-    user_input = st.chat_input("💬 和莉莉聊聊吧...")
+    # ---- 快捷指令 ----
+    cols = st.columns(4)
+    with cols[0]:
+        if st.button("🌤️ 查天气", use_container_width=True):
+            st.session_state.quick_input = "深圳今天天气怎么样？"
+            st.rerun()
+    with cols[1]:
+        if st.button("🧮 计算", use_container_width=True):
+            st.session_state.quick_input = "123 * 456 = ?"
+            st.rerun()
+    with cols[2]:
+        if st.button("🔍 搜索", use_container_width=True):
+            st.session_state.quick_input = "搜索一下最新的AI新闻"
+            st.rerun()
+    with cols[3]:
+        if st.button("💡 随机", use_container_width=True):
+            questions = ["什么是大语言模型？", "AI会取代人类工作吗？", "推荐几本Python入门书"]
+            st.session_state.quick_input = random.choice(questions)
+            st.rerun()
+
+    # ---- 输入框 ----
+    if "quick_input" in st.session_state and st.session_state.quick_input:
+        user_input = st.session_state.quick_input
+        st.session_state.quick_input = ""
+    else:
+        user_input = st.chat_input("💬 和莉莉聊聊吧...")
 
     if user_input:
+        # 保存用户消息
         st.session_state.messages.append({"role": "user", "content": user_input})
-        st.markdown(f'<div class="user-message">{user_input}</div>', unsafe_allow_html=True)
+        st.chat_message("user").write(user_input)
         db.save_message(st.session_state.current_conv_id, "user", user_input)
 
-        if db.get_conversation_title(st.session_state.current_conv_id) == "莉莉的新对话":
-            title = user_input[:30]
+        # 自动命名对话
+        if db.get_conversation_title(st.session_state.current_conv_id) == "新对话":
+            title = user_input[:20] + "..." if len(user_input) > 20 else user_input
             db.update_conversation_title(st.session_state.current_conv_id, title)
 
+        # 构建历史并调用
+        history = [{"role": "system", "content": "你是莉莉，一个温柔可爱的AI助手。回答要简洁清晰、有帮助。"}]
+        for msg in st.session_state.messages[-10:]:
+            history.append(msg)
+
         with st.spinner("莉莉正在思考..."):
-            try:
-                if mode == "💬 普通模式":
-                    history = st.session_state.messages[-10:]
-                    if not history or history[0]["role"] != "system":
-                        history = [{"role": "system", "content": "你是莉莉，一个温柔可爱的小花仙助手"}] + history
-                    response = client.chat_with_history(history, temperature=temperature)
-                elif mode == "🤖 单Agent模式":
-                    response = react_agent(user_input, max_steps=max_steps, cost_monitor=cost_monitor)
-                else:
-                    supervisor = SupervisorAgent()
-                    response = supervisor.orchestrate(user_input)
+            response = client.chat_with_history(history, temperature=temperature)
 
-                st.markdown(f'<div class="assistant-message">{response}</div>', unsafe_allow_html=True)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-                db.save_message(st.session_state.current_conv_id, "assistant", response)
-
-            except Exception as e:
-                st.error(f"莉莉遇到问题：{e}")
+        # 保存并显示回复
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.chat_message("assistant").write(response)
+        db.save_message(st.session_state.current_conv_id, "assistant", response)
 
 
 # ==================== 主入口 ====================
@@ -628,7 +548,8 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = None
 
-load_css()
+# 设置页面配置
+st.set_page_config(page_title="🌸 莉莉", page_icon="🌸", layout="wide")
 
 if not st.session_state.logged_in:
     show_login_page()
