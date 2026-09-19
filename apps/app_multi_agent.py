@@ -667,57 +667,6 @@ def main_app():
 
         st.divider()
 
-        # ========== 导出对话 ==========
-        st.divider()
-        st.markdown("### 📤 导出对话")
-
-        # 检查是否有消息可导出
-        if st.session_state.messages:
-            from utils.export_utils import export_to_markdown, export_to_txt, export_to_html
-
-            # 获取当前对话标题
-            current_title = db.get_conversation_title(st.session_state.current_conv_id)
-
-            # 导出格式选择
-            export_format = st.selectbox(
-                "选择格式",
-                ["Markdown (.md)", "TXT (.txt)", "HTML (.html)"],
-                key="export_format"
-            )
-
-            # 导出按钮
-            if st.button("📥 导出当前对话", use_container_width=True):
-                messages = st.session_state.messages
-                title = current_title or "莉莉对话记录"
-
-                if export_format == "Markdown (.md)":
-                    content = export_to_markdown(messages, title)
-                    file_ext = "md"
-                    mime = "text/markdown"
-                elif export_format == "HTML (.html)":
-                    content = export_to_html(messages, title)
-                    file_ext = "html"
-                    mime = "text/html"
-                else:
-                    content = export_to_txt(messages, title)
-                    file_ext = "txt"
-                    mime = "text/plain"
-
-                # 生成文件名
-                filename = f"莉莉对话_{datetime.now().strftime('%Y%m%d_%H%M')}.{file_ext}"
-
-                st.download_button(
-                    label="📄 点击下载",
-                    data=content.encode("utf-8"),
-                    file_name=filename,
-                    mime=mime,
-                    use_container_width=True,
-                    key="download_btn"
-                )
-        else:
-            st.caption("💡 开始对话后即可导出")
-
-
         st.markdown("### ⚙️ 参数")
         temperature = st.slider("🎨 创造力", 0.0, 2.0, 0.7, 0.1)
 
